@@ -8,15 +8,24 @@
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from timm.models.layers import trunc_normal_, DropPath
+from timm.models.layers import DropPath, trunc_normal_
 
-__all__ = ['convnextv2_atto', 'convnextv2_femto', 'convnext_pico', 'convnextv2_nano', 'convnextv2_tiny', 'convnextv2_base', 'convnextv2_large', 'convnextv2_huge']
+__all__ = [
+    "convnext_pico",
+    "convnextv2_atto",
+    "convnextv2_base",
+    "convnextv2_femto",
+    "convnextv2_huge",
+    "convnextv2_large",
+    "convnextv2_nano",
+    "convnextv2_tiny",
+]
+
 
 class LayerNorm(nn.Module):
-    """ LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs
-    with shape (batch_size, channels, height, width).
+    """LayerNorm that supports two data formats: channels_last (default) or channels_first. The ordering of the
+    dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height, width, channels)
+    while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_last"):
@@ -41,8 +50,7 @@ class LayerNorm(nn.Module):
 
 
 class GRN(nn.Module):
-    """ GRN (Global Response Normalization) layer
-    """
+    """GRN (Global Response Normalization) layer."""
 
     def __init__(self, dim):
         super().__init__()
@@ -54,15 +62,16 @@ class GRN(nn.Module):
         Nx = Gx / (Gx.mean(dim=-1, keepdim=True) + 1e-6)
         return self.gamma * (x * Nx) + self.beta + x
 
+
 class Block(nn.Module):
-    """ ConvNeXtV2 Block.
+    """ConvNeXtV2 Block.
 
     Args:
         dim (int): Number of input channels.
         drop_path (float): Stochastic depth rate. Default: 0.0
     """
 
-    def __init__(self, dim, drop_path=0.):
+    def __init__(self, dim, drop_path=0.0):
         super().__init__()
         self.dwconv = nn.Conv2d(dim, dim, kernel_size=7, padding=3, groups=dim)  # depthwise conv
         self.norm = LayerNorm(dim, eps=1e-6)
@@ -70,7 +79,7 @@ class Block(nn.Module):
         self.act = nn.GELU()
         self.grn = GRN(4 * dim)
         self.pwconv2 = nn.Linear(4 * dim, dim)
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x):
         input = x
@@ -88,7 +97,7 @@ class Block(nn.Module):
 
 
 class ConvNeXtV2(nn.Module):
-    """ ConvNeXt V2
+    """ConvNeXt V2.
 
     Args:
         in_chans (int): Number of input image channels. Default: 3
@@ -99,16 +108,21 @@ class ConvNeXtV2(nn.Module):
         head_init_scale (float): Init scaling value for classifier weights and biases. Default: 1.
     """
 
-    def __init__(self, in_chans=3, num_classes=1000,
-                 depths=[3, 3, 9, 3], dims=[96, 192, 384, 768],
-                 drop_path_rate=0., head_init_scale=1.
-                 ):
+    def __init__(
+        self,
+        in_chans=3,
+        num_classes=1000,
+        depths=[3, 3, 9, 3],
+        dims=[96, 192, 384, 768],
+        drop_path_rate=0.0,
+        head_init_scale=1.0,
+    ):
         super().__init__()
         self.depths = depths
         self.downsample_layers = nn.ModuleList()  # stem and 3 intermediate downsampling conv layers
         stem = nn.Sequential(
             nn.Conv2d(in_chans, dims[0], kernel_size=4, stride=4),
-            LayerNorm(dims[0], eps=1e-6, data_format="channels_first")
+            LayerNorm(dims[0], eps=1e-6, data_format="channels_first"),
         )
         self.downsample_layers.append(stem)
         for i in range(3):
@@ -122,9 +136,7 @@ class ConvNeXtV2(nn.Module):
         dp_rates = [x.item() for x in torch.linspace(0, drop_path_rate, sum(depths))]
         cur = 0
         for i in range(4):
-            stage = nn.Sequential(
-                *[Block(dim=dims[i], drop_path=dp_rates[cur + j]) for j in range(depths[i])]
-            )
+            stage = nn.Sequential(*[Block(dim=dims[i], drop_path=dp_rates[cur + j]) for j in range(depths[i])])
             self.stages.append(stage)
             cur += depths[i]
 
@@ -135,9 +147,10 @@ class ConvNeXtV2(nn.Module):
         self.head.weight.data.mul_(head_init_scale)
         self.head.bias.data.mul_(head_init_scale)
         self.width_list = [i.size(1) for i in self.forward(torch.randn(1, 3, 640, 640))]
+
     def _init_weights(self, m):
         if isinstance(m, (nn.Conv2d, nn.Linear)):
-            trunc_normal_(m.weight, std=.02)
+            trunc_normal_(m.weight, std=0.02)
             nn.init.constant_(m.bias, 0)
 
     def forward(self, x):
@@ -187,7 +200,6 @@ def convnextv2_large(**kwargs):
 def convnextv2_huge(**kwargs):
     model = ConvNeXtV2(depths=[3, 3, 27, 3], dims=[352, 704, 1408, 2816], **kwargs)
     return model
-
 
 
 if __name__ == "__main__":

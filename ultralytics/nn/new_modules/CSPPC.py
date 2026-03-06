@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['CSPPC']
+__all__ = ["CSPPC"]
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -15,6 +15,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -40,9 +41,9 @@ class Partial_conv3(nn.Module):
         self.dim_untouched = dim - self.dim_conv3
         self.partial_conv3 = nn.Conv2d(self.dim_conv3, self.dim_conv3, 3, 1, 1, bias=False)
 
-        if forward == 'slicing':
+        if forward == "slicing":
             self.forward = self.forward_slicing
-        elif forward == 'split_cat':
+        elif forward == "split_cat":
             self.forward = self.forward_split_cat
         else:
             raise NotImplementedError
@@ -50,7 +51,7 @@ class Partial_conv3(nn.Module):
     def forward_slicing(self, x):
         # only for inference
         x = x.clone()  # !!! Keep the original input intact for the residual connection later
-        x[:, :self.dim_conv3, :, :] = self.partial_conv3(x[:, :self.dim_conv3, :, :])
+        x[:, : self.dim_conv3, :, :] = self.partial_conv3(x[:, : self.dim_conv3, :, :])
         return x
 
     def forward_split_cat(self, x):
@@ -64,8 +65,9 @@ class Partial_conv3(nn.Module):
 class CSPPC_Bottleneck(nn.Module):
     def __init__(self, dim):
         super().__init__()
-        self.DualPConv = nn.Sequential(Partial_conv3(dim, n_div=4, forward='split_cat'),
-                                       Partial_conv3(dim, n_div=4, forward='split_cat'))
+        self.DualPConv = nn.Sequential(
+            Partial_conv3(dim, n_div=4, forward="split_cat"), Partial_conv3(dim, n_div=4, forward="split_cat")
+        )
 
     def forward(self, x):
         return self.DualPConv(x)

@@ -93,7 +93,7 @@ from .GhostConv import *
 # from .YOLOFace import *
 # from .DCNv3LKA import *
 # from .Detect_Adown import *
-# from .Foucs import *
+# from .Focus import *
 # from .SPDADown import *
 # from .Unfog import *
 # from .AODNet import *

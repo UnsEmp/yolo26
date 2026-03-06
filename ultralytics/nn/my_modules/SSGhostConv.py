@@ -1,6 +1,8 @@
 import torch
 import torch.nn as nn
+
 from ultralytics.nn.modules.conv import Conv
+
 
 class SSGhostConv(nn.Module):
     def __init__(self, c1, c2, k=1, s=1, g=1, act=True):
@@ -11,24 +13,16 @@ class SSGhostConv(nn.Module):
 
         self.cv1 = Conv(c1, c_, k, s, None, g, act=act)
 
-        self.cv2 = nn.ModuleList([
-            # 3x3 DWConv
-            Conv(c_, c_, 3, 1, None, c_, act=act),
-
-            # 3x3 DWConv + dilation=2 (等效 5x5)
-            nn.Conv2d(
-                c_, c_,
-                kernel_size=3,
-                stride=1,
-                padding=2,
-                dilation=2,
-                groups=c_,
-                bias=False
-            ),
-
-            # Identity
-            nn.Identity()
-        ])
+        self.cv2 = nn.ModuleList(
+            [
+                # 3x3 DWConv
+                Conv(c_, c_, 3, 1, None, c_, act=act),
+                # 3x3 DWConv + dilation=2 (等效 5x5)
+                nn.Conv2d(c_, c_, kernel_size=3, stride=1, padding=2, dilation=2, groups=c_, bias=False),
+                # Identity
+                nn.Identity(),
+            ]
+        )
 
     def forward(self, x):
         y = self.cv1(x)
