@@ -1,14 +1,15 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
-__all__ = ['RepNCSPELAN4_low', 'RepNCSPELAN4_high']
+__all__ = ["RepNCSPELAN4_high", "RepNCSPELAN4_low"]
 
 
 class RepConvN(nn.Module):
-    """RepConv is a basic rep-style block, including training and deploy status
-    This code is based on https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py
+    """RepConv is a basic rep-style block, including training and deploy status This code is based on
+    https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py.
     """
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=3, s=1, p=1, g=1, d=1, act=True, bn=False, deploy=False):
@@ -24,11 +25,11 @@ class RepConvN(nn.Module):
         self.conv2 = Conv(c1, c2, 1, s, p=(p - k // 2), g=g, act=False)
 
     def forward_fuse(self, x):
-        """Forward process"""
+        """Forward process."""
         return self.act(self.conv(x))
 
     def forward(self, x):
-        """Forward process"""
+        """Forward process."""
         id_out = 0 if self.bn is None else self.bn(x)
         return self.act(self.conv1(x) + self.conv2(x) + id_out)
 
@@ -44,7 +45,7 @@ class RepConvN(nn.Module):
         kernel_size = avgp.kernel_size
         input_dim = channels // groups
         k = torch.zeros((channels, input_dim, kernel_size, kernel_size))
-        k[np.arange(channels), np.tile(np.arange(input_dim), groups), :, :] = 1.0 / kernel_size ** 2
+        k[np.arange(channels), np.tile(np.arange(input_dim), groups), :, :] = 1.0 / kernel_size**2
         return k
 
     def _pad_1x1_to_3x3_tensor(self, kernel1x1):
@@ -64,7 +65,7 @@ class RepConvN(nn.Module):
             beta = branch.bn.bias
             eps = branch.bn.eps
         elif isinstance(branch, nn.BatchNorm2d):
-            if not hasattr(self, 'id_tensor'):
+            if not hasattr(self, "id_tensor"):
                 input_dim = self.c1 // self.g
                 kernel_value = np.zeros((self.c1, input_dim, 3, 3), dtype=np.float32)
                 for i in range(self.c1):
@@ -81,29 +82,31 @@ class RepConvN(nn.Module):
         return kernel * t, beta - running_mean * gamma / std
 
     def fuse_convs(self):
-        if hasattr(self, 'conv'):
+        if hasattr(self, "conv"):
             return
         kernel, bias = self.get_equivalent_kernel_bias()
-        self.conv = nn.Conv2d(in_channels=self.conv1.conv.in_channels,
-                              out_channels=self.conv1.conv.out_channels,
-                              kernel_size=self.conv1.conv.kernel_size,
-                              stride=self.conv1.conv.stride,
-                              padding=self.conv1.conv.padding,
-                              dilation=self.conv1.conv.dilation,
-                              groups=self.conv1.conv.groups,
-                              bias=True).requires_grad_(False)
+        self.conv = nn.Conv2d(
+            in_channels=self.conv1.conv.in_channels,
+            out_channels=self.conv1.conv.out_channels,
+            kernel_size=self.conv1.conv.kernel_size,
+            stride=self.conv1.conv.stride,
+            padding=self.conv1.conv.padding,
+            dilation=self.conv1.conv.dilation,
+            groups=self.conv1.conv.groups,
+            bias=True,
+        ).requires_grad_(False)
         self.conv.weight.data = kernel
         self.conv.bias.data = bias
         for para in self.parameters():
             para.detach_()
-        self.__delattr__('conv1')
-        self.__delattr__('conv2')
-        if hasattr(self, 'nm'):
-            self.__delattr__('nm')
-        if hasattr(self, 'bn'):
-            self.__delattr__('bn')
-        if hasattr(self, 'id_tensor'):
-            self.__delattr__('id_tensor')
+        self.__delattr__("conv1")
+        self.__delattr__("conv2")
+        if hasattr(self, "nm"):
+            self.__delattr__("nm")
+        if hasattr(self, "bn"):
+            self.__delattr__("bn")
+        if hasattr(self, "id_tensor"):
+            self.__delattr__("id_tensor")
 
 
 class RepNBottleneck(nn.Module):
