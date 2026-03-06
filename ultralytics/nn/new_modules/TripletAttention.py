@@ -1,15 +1,35 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['C2f_TripletAt', 'TripletAttention']
+__all__ = ["C2f_TripletAt", "TripletAttention"]
+
 
 class BasicConv(nn.Module):
-    def __init__(self, in_planes, out_planes, kernel_size, stride=1, padding=0, dilation=1, groups=1, relu=True,
-                 bn=True, bias=False):
-        super(BasicConv, self).__init__()
+    def __init__(
+        self,
+        in_planes,
+        out_planes,
+        kernel_size,
+        stride=1,
+        padding=0,
+        dilation=1,
+        groups=1,
+        relu=True,
+        bn=True,
+        bias=False,
+    ):
+        super().__init__()
         self.out_channels = out_planes
-        self.conv = nn.Conv2d(in_planes, out_planes, kernel_size=kernel_size, stride=stride, padding=padding,
-                              dilation=dilation, groups=groups, bias=bias)
+        self.conv = nn.Conv2d(
+            in_planes,
+            out_planes,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            dilation=dilation,
+            groups=groups,
+            bias=bias,
+        )
         self.bn = nn.BatchNorm2d(out_planes, eps=1e-5, momentum=0.01, affine=True) if bn else None
         self.relu = nn.ReLU() if relu else None
 
@@ -29,7 +49,7 @@ class ZPool(nn.Module):
 
 class AttentionGate(nn.Module):
     def __init__(self):
-        super(AttentionGate, self).__init__()
+        super().__init__()
         kernel_size = 7
         self.compress = ZPool()
         self.conv = BasicConv(2, 1, kernel_size, stride=1, padding=(kernel_size - 1) // 2, relu=False)
@@ -43,7 +63,7 @@ class AttentionGate(nn.Module):
 
 class TripletAttention(nn.Module):
     def __init__(self, no_spatial=False):
-        super(TripletAttention, self).__init__()
+        super().__init__()
         self.cw = AttentionGate()
         self.hc = AttentionGate()
         self.no_spatial = no_spatial
@@ -64,6 +84,7 @@ class TripletAttention(nn.Module):
             x_out = 1 / 2 * (x_out11 + x_out21)
         return x_out
 
+
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
     if d > 1:
@@ -75,6 +96,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -124,7 +146,8 @@ class C2f_TripletAt(nn.Module):
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
         self.m = nn.ModuleList(
-            Bottleneck_TripletAt(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+            Bottleneck_TripletAt(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n)
+        )
 
     def forward(self, x):
         """Forward pass through C2f layer."""
