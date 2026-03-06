@@ -3,15 +3,15 @@ import math
 import numpy as np
 import torch
 import torch.nn as nn
+
 from ultralytics.utils.tal import dist2bbox, make_anchors
 
-__all__ = ['RepHead']
+__all__ = ["RepHead"]
 
 
 class DFL(nn.Module):
-    """
-    Integral module of Distribution Focal Loss (DFL).
-    Proposed in Generalized Focal Loss https://ieeexplore.ieee.org/document/9792391
+    """Integral module of Distribution Focal Loss (DFL). Proposed in Generalized Focal Loss
+    https://ieeexplore.ieee.org/document/9792391.
     """
 
     def __init__(self, c1=16):
@@ -24,7 +24,7 @@ class DFL(nn.Module):
 
     def forward(self, x):
         """Applies a transformer layer on input tensor 'x' and returns a tensor."""
-        b, c, a = x.shape  # batch, channels, anchors
+        b, _c, a = x.shape  # batch, channels, anchors
         return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
@@ -40,6 +40,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -59,10 +60,8 @@ class Conv(nn.Module):
 
 
 class RepConv(nn.Module):
-    """
-    RepConv is a basic rep-style block, including training and deploy status.
-    This module is used in RT-DETR.
-    Based on https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py
+    """RepConv is a basic rep-style block, including training and deploy status. This module is used in RT-DETR. Based
+    on https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py.
     """
 
     default_act = nn.SiLU()  # default activation
@@ -162,6 +161,7 @@ class RepConv(nn.Module):
 
 class RepHead(nn.Module):
     """YOLOv8 Detect Efficient head for detection models."""
+
     dynamic = False  # force grid reconstruction
     export = False  # export mode
     shape = None
@@ -193,9 +193,9 @@ class RepHead(nn.Module):
             self.shape = shape
 
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.export and self.format in ('saved_model', 'pb', 'tflite', 'edgetpu', 'tfjs'):  # avoid TF FlexSplitV ops
-            box = x_cat[:, :self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4:]
+        if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            box = x_cat[:, : self.reg_max * 4]
+            cls = x_cat[:, self.reg_max * 4 :]
         else:
             box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = dist2bbox(self.dfl(box), self.anchors.unsqueeze(0), xywh=True, dim=1) * self.strides
@@ -209,7 +209,7 @@ class RepHead(nn.Module):
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a.bias.data[:] = 1.0  # box
-            b.bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+            b.bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
 
 if __name__ == "__main__":

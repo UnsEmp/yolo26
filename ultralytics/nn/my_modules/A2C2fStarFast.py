@@ -5,7 +5,7 @@
 
 # # ==========================================
 # # 1. 引用或确认 C3Ghost (官方已有，无需重写，只需确认导入)
-# # from .block import C3Ghost 
+# # from .block import C3Ghost
 # # ==========================================
 
 # # ==========================================
@@ -16,7 +16,7 @@
 #     """StarNet 核心交互单元: 深度卷积 + 元素乘法"""
 #     def __init__(self, c1, c2, k=3, s=1):
 #         super().__init__()
-#         self.dwconv = Conv(c1, c1, k, s, g=c1, act=False) 
+#         self.dwconv = Conv(c1, c1, k, s, g=c1, act=False)
 #         self.f1 = Conv(c1, c2, 1, 1, act=False)
 #         self.f2 = Conv(c1, c2, 1, 1, act=False)
 #         self.act = nn.ReLU6()
@@ -53,11 +53,13 @@
 
 import torch
 import torch.nn as nn
+
 from ultralytics.nn.modules.conv import Conv
 
 
 class StarInteraction(nn.Module):
-    """StarNet-style interaction unit (depthwise conv + gated projection)"""
+    """StarNet-style interaction unit (depthwise conv + gated projection)."""
+
     def __init__(self, c):
         super().__init__()
         self.dwconv = Conv(c, c, 3, 1, g=c, act=False)
@@ -71,11 +73,9 @@ class StarInteraction(nn.Module):
 
 
 class A2C2fStarFast(nn.Module):
+    """Repeatable A2C2f-Star module - Fully compatible with Ultralytics parse_model - Safe for repeats > 1.
     """
-    Repeatable A2C2f-Star module
-    - Fully compatible with Ultralytics parse_model
-    - Safe for repeats > 1
-    """
+
     def __init__(self, c1, c2, n=1, e=0.5):
         super().__init__()
         c_ = int(c2 * e)  # hidden channels

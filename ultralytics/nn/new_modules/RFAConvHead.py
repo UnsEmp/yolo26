@@ -1,12 +1,14 @@
+import math
+
 import torch
 import torch.nn as nn
-import math
 from einops import rearrange
+
 from ultralytics.utils.checks import check_version
 
-__all__ = ['RFAHead', 'RFAPose', 'RFASegment']
+__all__ = ["RFAHead", "RFAPose", "RFASegment"]
 
-TORCH_1_10 = check_version(torch.__version__, '1.10.0')
+TORCH_1_10 = check_version(torch.__version__, "1.10.0")
 
 
 def make_anchors(feats, strides, grid_cell_offset=0.5):
@@ -18,7 +20,7 @@ def make_anchors(feats, strides, grid_cell_offset=0.5):
         _, _, h, w = feats[i].shape
         sx = torch.arange(end=w, device=device, dtype=dtype) + grid_cell_offset  # shift x
         sy = torch.arange(end=h, device=device, dtype=dtype) + grid_cell_offset  # shift y
-        sy, sx = torch.meshgrid(sy, sx, indexing='ij') if TORCH_1_10 else torch.meshgrid(sy, sx)
+        sy, sx = torch.meshgrid(sy, sx, indexing="ij") if TORCH_1_10 else torch.meshgrid(sy, sx)
         anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
         stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
     return torch.cat(anchor_points), torch.cat(stride_tensor)
@@ -37,9 +39,8 @@ def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
 
 
 class DFL(nn.Module):
-    """
-    Integral module of Distribution Focal Loss (DFL).
-    Proposed in Generalized Focal Loss https://ieeexplore.ieee.org/document/9792391
+    """Integral module of Distribution Focal Loss (DFL). Proposed in Generalized Focal Loss
+    https://ieeexplore.ieee.org/document/9792391.
     """
 
     def __init__(self, c1=16):
@@ -52,7 +53,7 @@ class DFL(nn.Module):
 
     def forward(self, x):
         """Applies a transformer layer on input tensor 'x' and returns a tensor."""
-        b, c, a = x.shape  # batch, channels, anchors
+        b, _c, a = x.shape  # batch, channels, anchors
         return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
@@ -61,9 +62,8 @@ class Proto(nn.Module):
     """YOLOv8 mask Proto module for segmentation models."""
 
     def __init__(self, c1, c_=256, c2=32):
-        """
-        Initializes the YOLOv8 mask Proto module with specified number of protos and masks.
-        Input arguments are ch_in, number of protos, number of masks.
+        """Initializes the YOLOv8 mask Proto module with specified number of protos and masks. Input arguments are
+        ch_in, number of protos, number of masks.
         """
         super().__init__()
         self.cv1 = Conv(c1, c_, k=3)
@@ -87,6 +87,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -110,14 +111,23 @@ class RFAConv(nn.Module):
         super().__init__()
         self.kernel_size = kernel_size
 
-        self.get_weight = nn.Sequential(nn.AvgPool2d(kernel_size=kernel_size, padding=kernel_size // 2, stride=stride),
-                                        nn.Conv2d(in_channel, in_channel * (kernel_size ** 2), kernel_size=1,
-                                                  groups=in_channel, bias=False))
+        self.get_weight = nn.Sequential(
+            nn.AvgPool2d(kernel_size=kernel_size, padding=kernel_size // 2, stride=stride),
+            nn.Conv2d(in_channel, in_channel * (kernel_size**2), kernel_size=1, groups=in_channel, bias=False),
+        )
         self.generate_feature = nn.Sequential(
-            nn.Conv2d(in_channel, in_channel * (kernel_size ** 2), kernel_size=kernel_size, padding=kernel_size // 2,
-                      stride=stride, groups=in_channel, bias=False),
-            nn.BatchNorm2d(in_channel * (kernel_size ** 2)),
-            nn.ReLU())
+            nn.Conv2d(
+                in_channel,
+                in_channel * (kernel_size**2),
+                kernel_size=kernel_size,
+                padding=kernel_size // 2,
+                stride=stride,
+                groups=in_channel,
+                bias=False,
+            ),
+            nn.BatchNorm2d(in_channel * (kernel_size**2)),
+            nn.ReLU(),
+        )
 
         self.conv = Conv(in_channel, out_channel, k=kernel_size, s=kernel_size, p=0)
 
@@ -125,18 +135,22 @@ class RFAConv(nn.Module):
         b, c = x.shape[0:2]
         weight = self.get_weight(x)
         h, w = weight.shape[2:]
-        weighted = weight.view(b, c, self.kernel_size ** 2, h, w).softmax(2)  # b c*kernel**2,h,w ->  b c k**2 h w
-        feature = self.generate_feature(x).view(b, c, self.kernel_size ** 2, h,
-                                                w)  # b c*kernel**2,h,w ->  b c k**2 h w
+        weighted = weight.view(b, c, self.kernel_size**2, h, w).softmax(2)  # b c*kernel**2,h,w ->  b c k**2 h w
+        feature = self.generate_feature(x).view(b, c, self.kernel_size**2, h, w)  # b c*kernel**2,h,w ->  b c k**2 h w
         weighted_data = feature * weighted
-        conv_data = rearrange(weighted_data, 'b c (n1 n2) h w -> b c (h n1) (w n2)', n1=self.kernel_size,
-                              # b c k**2 h w ->  b c h*k w*k
-                              n2=self.kernel_size)
+        conv_data = rearrange(
+            weighted_data,
+            "b c (n1 n2) h w -> b c (h n1) (w n2)",
+            n1=self.kernel_size,
+            # b c k**2 h w ->  b c h*k w*k
+            n2=self.kernel_size,
+        )
         return self.conv(conv_data)
 
 
 class RFAHead(nn.Module):
     """YOLOv8 Detect Efficient head for detection models."""
+
     dynamic = False  # force grid reconstruction
     export = False  # export mode
     shape = None
@@ -168,9 +182,9 @@ class RFAHead(nn.Module):
             self.shape = shape
 
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.export and self.format in ('saved_model', 'pb', 'tflite', 'edgetpu', 'tfjs'):  # avoid TF FlexSplitV ops
-            box = x_cat[:, :self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4:]
+        if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            box = x_cat[:, : self.reg_max * 4]
+            cls = x_cat[:, self.reg_max * 4 :]
         else:
             box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = dist2bbox(self.dfl(box), self.anchors.unsqueeze(0), xywh=True, dim=1) * self.strides
@@ -184,7 +198,7 @@ class RFAHead(nn.Module):
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a.bias.data[:] = 1.0  # box
-            b.bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+            b.bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
 
 class RFASegment(RFAHead):
