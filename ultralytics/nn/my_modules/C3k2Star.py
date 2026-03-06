@@ -1,11 +1,12 @@
 import torch
 import torch.nn as nn
-from ultralytics.nn.modules.conv import Conv, autopad
+
+from ultralytics.nn.modules.conv import Conv
+
 
 class StarBlock(nn.Module):
-    """
-    AMP-safe StarBlock (NO inplace, NO tensor reuse bug)
-    """
+    """AMP-safe StarBlock (NO inplace, NO tensor reuse bug)."""
+
     def __init__(self, c1, c2, k=3, s=1, shortcut=True):
         super().__init__()
 
@@ -17,7 +18,6 @@ class StarBlock(nn.Module):
 
         # ⚠️ 关键 2：使用非 inplace 的 SiLU
         self.act = nn.SiLU(inplace=False)
-
 
         self.conv2 = Conv(c2, c2, 1, 1, act=False)
         self.add = shortcut and c1 == c2
@@ -36,11 +36,11 @@ class StarBlock(nn.Module):
 
         return x + res if self.add else x
 
+
 class C3kStar(nn.Module):
+    """C3k 的 StarBlock 版本封装。 当 c3k=True 时调用此模块，允许更灵活的核大小配置（虽然默认通常还是3）。.
     """
-    C3k 的 StarBlock 版本封装。
-    当 c3k=True 时调用此模块，允许更灵活的核大小配置（虽然默认通常还是3）。
-    """
+
     def __init__(self, c1, c2, k=3, step=1):
         super().__init__()
         # 这里可以直接调用 StarBlock，保持接口灵活性
@@ -49,24 +49,23 @@ class C3kStar(nn.Module):
     def forward(self, x):
         return self.m(x)
 
+
 class C3k2Star(nn.Module):
-    """
-    基于 YOLOv11 C3k2 改良，核心模块替换为 StarBlock
-    """
+    """基于 YOLOv11 C3k2 改良，核心模块替换为 StarBlock."""
+
     def __init__(self, c1, c2, n=1, c3k=False, e=0.5, g=1, shortcut=True):
         super().__init__()
         self.c = int(c2 * e)  # hidden channels
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         # C2f/C3k2 的核心机制：输入 n+2 个 tensor 进行 concat，所以输入通道是 (2+n)*c
-        self.cv2 = Conv((2 + n) * self.c, c2, 1) 
-        
+        self.cv2 = Conv((2 + n) * self.c, c2, 1)
+
         # 核心修复逻辑：
         # 如果 c3k=True，使用 C3kStar 包装器（通常用于支持可变卷积核）
         # 如果 c3k=False，直接使用 StarBlock
         # 注意：这里我们默认 k=3，如果需要更小的核，可以在 C3kStar 初始化时调整
         self.m = nn.ModuleList(
-            C3kStar(self.c, self.c, k=3) if c3k else StarBlock(self.c, self.c, k=3, shortcut=shortcut)
-            for _ in range(n)
+            C3kStar(self.c, self.c, k=3) if c3k else StarBlock(self.c, self.c, k=3, shortcut=shortcut) for _ in range(n)
         )
 
     def forward(self, x):

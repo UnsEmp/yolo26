@@ -2,7 +2,7 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['CA', 'multiply', 'Add']
+__all__ = ["CA", "Add", "multiply"]
 
 
 class Add(nn.Module):
@@ -27,7 +27,7 @@ class multiply(nn.Module):
 
 class CA(nn.Module):
     def __init__(self, in_planes, ratio=4, flag=True):
-        super(CA, self).__init__()
+        super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.max_pool = nn.AdaptiveMaxPool2d(1)
 
@@ -50,7 +50,7 @@ class CA(nn.Module):
 
 class FeatureSelectionModule(nn.Module):
     def __init__(self, in_chan, out_chan):
-        super(FeatureSelectionModule, self).__init__()
+        super().__init__()
         self.conv_atten = nn.Conv2d(in_chan, in_chan, kernel_size=1)
         self.group_norm1 = nn.GroupNorm(32, in_chan)
         self.sigmoid = nn.Sigmoid()

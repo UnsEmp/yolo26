@@ -2,7 +2,8 @@ import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['AOD_pono_net']
+__all__ = ["AOD_pono_net"]
+
 
 class AODnet(nn.Module):
     def __init__(self):
@@ -29,6 +30,7 @@ class AODnet(nn.Module):
 
         output = k * x - k + self.b
         return F.relu(output)
+
 
 class AOD_pono_net(nn.Module):
     def __init__(self):
@@ -64,6 +66,7 @@ class AOD_pono_net(nn.Module):
         output = F.relu(output)
         return output
 
+
 class PONO(nn.Module):
     def __init__(self, input_size=None, return_stats=False, affine=True, eps=1e-5):
         super().__init__()
@@ -86,6 +89,7 @@ class PONO(nn.Module):
             x = x * self.gamma + self.beta
         return x, mean, std
 
+
 class MS(nn.Module):
     def __init__(self, beta=None, gamma=None):
         super().__init__()
@@ -104,7 +108,6 @@ class MS(nn.Module):
         return y
 
 
-
 if __name__ == "__main__":
     # Generating Sample image
     image_size = (1, 3, 640, 640)
@@ -112,4 +115,3 @@ if __name__ == "__main__":
     out = AOD_pono_net()
     out = out(image)
     print(out.size())
-

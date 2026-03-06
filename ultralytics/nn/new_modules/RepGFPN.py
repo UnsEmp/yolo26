@@ -1,9 +1,9 @@
+import numpy as np
 import torch
 import torch.nn as nn
-import numpy as np
 
+__all__ = ["CSPStage", "RepConv"]
 
-__all__ = ['CSPStage', 'RepConv']
 
 class swish(nn.Module):
     def forward(self, x):
@@ -21,6 +21,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = swish()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -90,7 +91,7 @@ class RepConv(nn.Module):
             beta = branch.bn.bias
             eps = branch.bn.eps
         elif isinstance(branch, nn.BatchNorm2d):
-            if not hasattr(self, 'id_tensor'):
+            if not hasattr(self, "id_tensor"):
                 input_dim = self.c1 // self.g
                 kernel_value = np.zeros((self.c1, input_dim, 3, 3), dtype=np.float32)
                 for i in range(self.c1):
@@ -108,38 +109,36 @@ class RepConv(nn.Module):
 
     def fuse_convs(self):
         """Combines two convolution layers into a single layer and removes unused attributes from the class."""
-        if hasattr(self, 'conv'):
+        if hasattr(self, "conv"):
             return
         kernel, bias = self.get_equivalent_kernel_bias()
-        self.conv = nn.Conv2d(in_channels=self.conv1.conv.in_channels,
-                              out_channels=self.conv1.conv.out_channels,
-                              kernel_size=self.conv1.conv.kernel_size,
-                              stride=self.conv1.conv.stride,
-                              padding=self.conv1.conv.padding,
-                              dilation=self.conv1.conv.dilation,
-                              groups=self.conv1.conv.groups,
-                              bias=True).requires_grad_(False)
+        self.conv = nn.Conv2d(
+            in_channels=self.conv1.conv.in_channels,
+            out_channels=self.conv1.conv.out_channels,
+            kernel_size=self.conv1.conv.kernel_size,
+            stride=self.conv1.conv.stride,
+            padding=self.conv1.conv.padding,
+            dilation=self.conv1.conv.dilation,
+            groups=self.conv1.conv.groups,
+            bias=True,
+        ).requires_grad_(False)
         self.conv.weight.data = kernel
         self.conv.bias.data = bias
         for para in self.parameters():
             para.detach_()
-        self.__delattr__('conv1')
-        self.__delattr__('conv2')
-        if hasattr(self, 'nm'):
-            self.__delattr__('nm')
-        if hasattr(self, 'bn'):
-            self.__delattr__('bn')
-        if hasattr(self, 'id_tensor'):
-            self.__delattr__('id_tensor')
+        self.__delattr__("conv1")
+        self.__delattr__("conv2")
+        if hasattr(self, "nm"):
+            self.__delattr__("nm")
+        if hasattr(self, "bn"):
+            self.__delattr__("bn")
+        if hasattr(self, "id_tensor"):
+            self.__delattr__("id_tensor")
 
 
 class BasicBlock_3x3_Reverse(nn.Module):
-    def __init__(self,
-                 ch_in,
-                 ch_hidden_ratio,
-                 ch_out,
-                 shortcut=True):
-        super(BasicBlock_3x3_Reverse, self).__init__()
+    def __init__(self, ch_in, ch_hidden_ratio, ch_out, shortcut=True):
+        super().__init__()
         assert ch_in == ch_out
         ch_hidden = int(ch_in * ch_hidden_ratio)
         self.conv1 = Conv(ch_hidden, ch_out, 3, s=1)
@@ -156,21 +155,12 @@ class BasicBlock_3x3_Reverse(nn.Module):
 
 
 class SPP(nn.Module):
-    def __init__(
-            self,
-            ch_in,
-            ch_out,
-            k,
-            pool_size
-    ):
-        super(SPP, self).__init__()
+    def __init__(self, ch_in, ch_out, k, pool_size):
+        super().__init__()
         self.pool = []
         for i, size in enumerate(pool_size):
-            pool = nn.MaxPool2d(kernel_size=size,
-                                stride=1,
-                                padding=size // 2,
-                                ceil_mode=False)
-            self.add_module('pool{}'.format(i), pool)
+            pool = nn.MaxPool2d(kernel_size=size, stride=1, padding=size // 2, ceil_mode=False)
+            self.add_module(f"pool{i}", pool)
             self.pool.append(pool)
         self.conv = Conv(ch_in, ch_out, k)
 
@@ -186,15 +176,8 @@ class SPP(nn.Module):
 
 
 class CSPStage(nn.Module):
-    def __init__(self,
-                 ch_in,
-                 ch_out,
-                 n,
-                 block_fn='BasicBlock_3x3_Reverse',
-                 ch_hidden_ratio=1.0,
-                 act='silu',
-                 spp=False):
-        super(CSPStage, self).__init__()
+    def __init__(self, ch_in, ch_out, n, block_fn="BasicBlock_3x3_Reverse", ch_hidden_ratio=1.0, act="silu", spp=False):
+        super().__init__()
 
         split_ratio = 2
         ch_first = int(ch_out // split_ratio)
@@ -205,17 +188,14 @@ class CSPStage(nn.Module):
 
         next_ch_in = ch_mid
         for i in range(n):
-            if block_fn == 'BasicBlock_3x3_Reverse':
+            if block_fn == "BasicBlock_3x3_Reverse":
                 self.convs.add_module(
-                    str(i),
-                    BasicBlock_3x3_Reverse(next_ch_in,
-                                           ch_hidden_ratio,
-                                           ch_mid,
-                                           shortcut=True))
+                    str(i), BasicBlock_3x3_Reverse(next_ch_in, ch_hidden_ratio, ch_mid, shortcut=True)
+                )
             else:
                 raise NotImplementedError
             if i == (n - 1) // 2 and spp:
-                self.convs.add_module('spp', SPP(ch_mid * 4, ch_mid, 1, [5, 9, 13]))
+                self.convs.add_module("spp", SPP(ch_mid * 4, ch_mid, 1, [5, 9, 13]))
             next_ch_in = ch_mid
         self.conv3 = Conv(ch_mid * n + ch_first, ch_out, 1)
 

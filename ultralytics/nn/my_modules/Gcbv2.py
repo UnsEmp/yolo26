@@ -1,4 +1,3 @@
-import torch
 import torch.nn as nn
 
 from ultralytics.nn.modules import GhostConv
@@ -18,9 +17,9 @@ class Gcbv1(nn.Module):
         self.cv_align = GhostConv(c1, c2, 1, 1)
 
     def forward(self, x):
-        x1 = self.pool_max(self.cv1(x))   # C = c2
-        x2 = self.pool_avg(x)             # C = c1
-        x2 = self.cv_align(x2)             # C = c2
+        x1 = self.pool_max(self.cv1(x))  # C = c2
+        x2 = self.pool_avg(x)  # C = c1
+        x2 = self.cv_align(x2)  # C = c2
         x = self.cv3(x)
 
         out = x + x1 + x2
