@@ -1,22 +1,21 @@
 import math
 import warnings
+
 import torch
 import torchvision
 
-warnings.filterwarnings('ignore')
+warnings.filterwarnings("ignore")
 
 
 class GatedDIP(torch.nn.Module):
-    """_summary_
+    """_summary_.
 
     Args:
         torch (_type_): _description_
     """
 
-    def __init__(self,
-                 encoder_output_dim=256,
-                 num_of_gates=7):
-        """_summary_
+    def __init__(self, encoder_output_dim=256, num_of_gates=7):
+        """_summary_.
 
         Args:
             encoder_output_dim (int, optional): _description_. Defaults to 256.
@@ -52,7 +51,7 @@ class GatedDIP(torch.nn.Module):
         self.tone_module = torch.nn.Sequential(torch.nn.Linear(encoder_output_dim, 8, bias=True))
 
     def rgb2lum(self, img):
-        """_summary_
+        """_summary_.
 
         Args:
             img (torch.tensor): _description_
@@ -67,7 +66,7 @@ class GatedDIP(torch.nn.Module):
         return (1 - l.unsqueeze(2).unsqueeze(3)) * a + l.unsqueeze(2).unsqueeze(3) * b
 
     def dark_channel(self, x):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -79,7 +78,7 @@ class GatedDIP(torch.nn.Module):
         return z
 
     def atmospheric_light(self, x, dark, top_k=1000):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -94,7 +93,7 @@ class GatedDIP(torch.nn.Module):
         darkvec = dark.reshape(x.shape[0], imsz, 1)
         imvec = x.reshape(x.shape[0], 3, imsz).transpose(1, 2)
         indices = darkvec.argsort(1)
-        indices = indices[:, imsz - numpx:imsz]
+        indices = indices[:, imsz - numpx : imsz]
         atmsum = torch.zeros([x.shape[0], 1, 3]).cuda()
         for b in range(x.shape[0]):
             for ind in range(1, numpx):
@@ -104,7 +103,7 @@ class GatedDIP(torch.nn.Module):
         return a
 
     def blur(self, x):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -115,13 +114,9 @@ class GatedDIP(torch.nn.Module):
         return self.gaussian_blur(x)
 
     def defog(self, x, latent_out, fog_gate):
-        """Defogging module is used for removing the fog from the image using ASM
-        (Atmospheric Scattering Model).
-        I(X) = (1-T(X)) * J(X) + T(X) * A(X)
-        I(X) => image containing the fog.
-        T(X) => Transmission map of the image.
-        J(X) => True image Radiance.
-        A(X) => Atmospheric scattering factor.
+        """Defogging module is used for removing the fog from the image using ASM (Atmospheric Scattering Model). I(X) =
+        (1-T(X)) * J(X) + T(X) * A(X) I(X) => image containing the fog. T(X) => Transmission map of the image.
+        J(X) => True image Radiance. A(X) => Atmospheric scattering factor.
 
         Args:
             x (torch.tensor): Input image I(X)
@@ -129,22 +124,22 @@ class GatedDIP(torch.nn.Module):
             fog_gate (torch.tensor): Gate value raning from (0. - 1.) which enables defog module.
 
         Returns:
-            torch.tensor : Returns defogged image with true image radiance.
+            torch.tensor: Returns defogged image with true image radiance.
         """
         omega = self.defogging_module(latent_out).unsqueeze(2).unsqueeze(3)
-        omega = self.tanh_range(omega, torch.tensor(0.1), torch.tensor(1.))
+        omega = self.tanh_range(omega, torch.tensor(0.1), torch.tensor(1.0))
         dark_i = self.dark_channel(x)
         a = self.atmospheric_light(x, dark_i)
         i = x / a
         i = self.dark_channel(i)
-        t = 1. - (omega * i)
+        t = 1.0 - (omega * i)
         j = ((x - a) / (torch.maximum(t, torch.tensor(0.01)))) + a
         j = (j - j.min()) / (j.max() - j.min())
         j = j * fog_gate.unsqueeze(1).unsqueeze(2).unsqueeze(3)
         return j
 
     def white_balance(self, x, latent_out, wb_gate):
-        """ White balance of the image is predicted using latent output of an encoder.
+        """White balance of the image is predicted using latent output of an encoder.
 
         Args:
             x (torch.tensor): Input RGB image.
@@ -158,8 +153,7 @@ class GatedDIP(torch.nn.Module):
         wb = self.wb_module(latent_out)
         wb = torch.exp(self.tanh_range(wb, -log_wb_range, log_wb_range))
 
-        color_scaling = 1. / (1e-5 + 0.27 * wb[:, 0] + 0.67 * wb[:, 1] +
-                              0.06 * wb[:, 2])
+        color_scaling = 1.0 / (1e-5 + 0.27 * wb[:, 0] + 0.67 * wb[:, 1] + 0.06 * wb[:, 2])
         wb = color_scaling.unsqueeze(1) * wb
         wb_out = wb.unsqueeze(2).unsqueeze(3) * x
         wb_out = (wb_out - wb_out.min()) / (wb_out.max() - wb_out.min())
@@ -167,7 +161,7 @@ class GatedDIP(torch.nn.Module):
         return wb_out
 
     def tanh01(self, x):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -178,7 +172,7 @@ class GatedDIP(torch.nn.Module):
         return torch.tanh(x) * 0.5 + 0.5
 
     def tanh_range(self, x, left, right):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -191,7 +185,7 @@ class GatedDIP(torch.nn.Module):
         return self.tanh01(x) * (right - left) + left
 
     def gamma_balance(self, x, latent_out, gamma_gate):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -210,7 +204,7 @@ class GatedDIP(torch.nn.Module):
         return g
 
     def sharpning(self, x, latent_out, sharpning_gate):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -222,14 +216,14 @@ class GatedDIP(torch.nn.Module):
         """
         out_x = self.blur(x)
         y = self.sharpning_module(latent_out).unsqueeze(2).unsqueeze(3)
-        y = self.tanh_range(y, torch.tensor(0.1), torch.tensor(1.))
+        y = self.tanh_range(y, torch.tensor(0.1), torch.tensor(1.0))
         s = x + (y * (x - out_x))
         s = (s - s.min()) / (s.max() - s.min())
         s = s * (sharpning_gate.unsqueeze(1).unsqueeze(2).unsqueeze(3))
         return s
 
     def identity(self, x, out_x, identity_gate):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -239,11 +233,11 @@ class GatedDIP(torch.nn.Module):
             _type_: _description_
         """
         g = identity_gate.unsqueeze(1).unsqueeze(2).unsqueeze(3)
-        x = (x * g) + ((torch.tensor(1.).cuda() - g) * out_x)
+        x = (x * g) + ((torch.tensor(1.0).cuda() - g) * out_x)
         return x
 
     def contrast(self, x, latent_out, contrast_gate):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -263,7 +257,7 @@ class GatedDIP(torch.nn.Module):
         return contrast_image
 
     def tone(self, x, latent_out, tone_gate):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.tensor): _description_
@@ -279,15 +273,16 @@ class GatedDIP(torch.nn.Module):
         tone_curve_sum = torch.sum(tone_curve, dim=2) + 1e-30
         total_image = x * 0
         for i in range(curve_steps):
-            total_image += torch.clamp(x - 1.0 * i / curve_steps, 0, 1.0 / curve_steps) \
-                           * tone_curve[:, :, i].unsqueeze(2).unsqueeze(3)
+            total_image += torch.clamp(x - 1.0 * i / curve_steps, 0, 1.0 / curve_steps) * tone_curve[:, :, i].unsqueeze(
+                2
+            ).unsqueeze(3)
         total_image *= curve_steps / tone_curve_sum.unsqueeze(2).unsqueeze(3)
         total_image = (total_image - total_image.min()) / (total_image.max() - total_image.min())
         total_image = total_image * tone_gate.unsqueeze(1).unsqueeze(2).unsqueeze(3)
         return total_image
 
     def forward(self, x):
-        """_summary_
+        """_summary_.
 
         Args:
             x (torch.Tensor): _description_
@@ -309,7 +304,7 @@ class GatedDIP(torch.nn.Module):
         return x
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     batch_size = 2
     encoder_out_dim = 256
     x = torch.randn(1, 3, 640, 640).cuda()
@@ -317,4 +312,4 @@ if __name__ == '__main__':
     model = GatedDIP(encoder_output_dim=encoder_out_dim).cuda()
     print(model)
     out = model(x)
-    print('out shape:', out.shape)
+    print("out shape:", out.shape)

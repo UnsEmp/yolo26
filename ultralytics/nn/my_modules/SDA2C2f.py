@@ -1,38 +1,35 @@
 import torch
 import torch.nn as nn
+
 from ultralytics.nn.modules.conv import Conv
 
+
 class StarBlock(nn.Module):
-    """Gated Star Operation (StarNet-style)"""
+    """Gated Star Operation (StarNet-style)."""
 
     def __init__(self, c):
         super().__init__()
-        self.gate = nn.Sequential(
-            nn.Conv2d(c, c, 1, bias=True),
-            nn.Sigmoid()
-        )
+        self.gate = nn.Sequential(nn.Conv2d(c, c, 1, bias=True), nn.Sigmoid())
 
     def forward(self, x):
         return x * self.gate(x)
 
 
 class SDA2C2f(nn.Module):
-    """
-    Star-Dynamic-A2C2f (YOLOv12 compatible)
-    """
+    """Star-Dynamic-A2C2f (YOLOv12 compatible)."""
 
     def __init__(
         self,
         c1,
         c2,
         n=1,
-        a2=True,          # 占位，对齐原 A2C2f
+        a2=True,  # 占位，对齐原 A2C2f
         area=1,
         residual=True,
-        mlp_ratio=2.0,   # 占位
+        mlp_ratio=2.0,  # 占位
         e=0.5,
-        g=1,             # 占位
-        shortcut=True    # 占位
+        g=1,  # 占位
+        shortcut=True,  # 占位
     ):
         super().__init__()
 
@@ -43,19 +40,11 @@ class SDA2C2f(nn.Module):
 
         self.use_residual = residual and c1 == c2
 
-
         # self.gamma = nn.Parameter(0.01 * torch.ones(c2)) if residual else None
         self.gamma = nn.Parameter(0.01 * torch.ones(c2)) if self.use_residual else None
 
-
         # Texture / Pose branch
-        self.blocks = nn.ModuleList(
-            nn.Sequential(
-                DynamicA2Block(c_, area),
-                StarBlock(c_)
-            )
-            for _ in range(n)
-        )
+        self.blocks = nn.ModuleList(nn.Sequential(DynamicA2Block(c_, area), StarBlock(c_)) for _ in range(n))
 
         # Structure prior branch
         self.structure_branch = WTConv(c_)
@@ -76,9 +65,8 @@ class SDA2C2f(nn.Module):
         return out
 
 
-    
 class WTConv(nn.Module):
-    """Wavelet-like Low-Frequency Structure Conv (Safe Approximation)"""
+    """Wavelet-like Low-Frequency Structure Conv (Safe Approximation)."""
 
     def __init__(self, c):
         super().__init__()
@@ -87,11 +75,12 @@ class WTConv(nn.Module):
 
     def forward(self, x):
         x_low = self.low_pass(x)
-        x_low = nn.functional.interpolate(x_low, size=x.shape[-2:], mode='nearest')
+        x_low = nn.functional.interpolate(x_low, size=x.shape[-2:], mode="nearest")
         return self.conv(x_low)
 
+
 class DynamicA2Block(nn.Module):
-    """Dynamic Area Attention Block"""
+    """Dynamic Area Attention Block."""
 
     def __init__(self, c, area=1):
         super().__init__()
@@ -121,16 +110,13 @@ class DynamicA2Block(nn.Module):
 
         return self.proj(out)
 
+
 class DynamicConv(nn.Module):
-    """Lightweight Dynamic Convolution (Safe Version)"""
+    """Lightweight Dynamic Convolution (Safe Version)."""
 
     def __init__(self, c):
         super().__init__()
-        self.kernel_gen = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(c, c, 1),
-            nn.Sigmoid()
-        )
+        self.kernel_gen = nn.Sequential(nn.AdaptiveAvgPool2d(1), nn.Conv2d(c, c, 1), nn.Sigmoid())
         self.conv = nn.Conv2d(c, c, 3, padding=1, groups=c, bias=False)
 
     def forward(self, x):

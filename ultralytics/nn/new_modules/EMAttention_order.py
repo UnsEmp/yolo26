@@ -1,20 +1,19 @@
 import torch
 from torch import nn
 
-__all__ = ['EMA', 'C2f_EMA']
+__all__ = ["EMA", "C2f_EMA"]
 
 
 class EMA(nn.Module):
     def __init__(self, channels, factor=32):
-        super(EMA, self).__init__()
+        super().__init__()
         self.groups = factor
         assert channels // self.groups > 0
         self.softmax = nn.Softmax(-1)
-        
+
         self.agp = nn.AdaptiveAvgPool2d((1, 1))
         self.pool_h = nn.AdaptiveAvgPool2d((None, 1))
         self.pool_w = nn.AdaptiveAvgPool2d((1, None))
-
 
         self.gn = nn.GroupNorm(channels // self.groups, channels // self.groups)
         self.conv1x1 = nn.Conv2d(channels // self.groups, channels // self.groups, kernel_size=1, stride=1, padding=0)
@@ -36,7 +35,7 @@ class EMA(nn.Module):
         x21 = self.softmax(self.agp(x2).reshape(b * self.groups, -1, 1).permute(0, 2, 1))
         x22 = x1.reshape(b * self.groups, c // self.groups, -1)  # b*g, c//g, hw
         weights = (torch.matmul(x11, x12) + torch.matmul(x21, x22)).reshape(b * self.groups, 1, h, w)
-        return (group_x * weights.sigmoid()).reshape(b, c, h, w) 
+        return (group_x * weights.sigmoid()).reshape(b, c, h, w)
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -50,6 +49,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -87,7 +87,6 @@ class Bottleneck(nn.Module):
         return x + self.Attention(self.cv2(self.cv1(x))) if self.add else self.Attention(self.cv2(self.cv1(x)))
 
 
-
 class C2f_EMA(nn.Module):
     """Faster Implementation of CSP Bottleneck with 2 convolutions."""
 
@@ -112,5 +111,3 @@ class C2f_EMA(nn.Module):
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
-
-
