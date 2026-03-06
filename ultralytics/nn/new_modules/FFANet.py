@@ -1,5 +1,6 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
+
 
 def default_conv(in_channels, out_channels, kernel_size, bias=True):
     return nn.Conv2d(in_channels, out_channels, kernel_size, padding=(kernel_size // 2), bias=bias)
@@ -12,7 +13,7 @@ class PALayer(nn.Module):
             nn.Conv2d(channel, channel // 8, 1, padding=0, bias=True),
             nn.ReLU(inplace=True),
             nn.Conv2d(channel // 8, 1, 1, padding=0, bias=True),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -28,7 +29,7 @@ class CALayer(nn.Module):
             nn.Conv2d(channel, channel // 8, 1, padding=0, bias=True),
             nn.ReLU(inplace=True),
             nn.Conv2d(channel // 8, channel, 1, padding=0, bias=True),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -38,7 +39,12 @@ class CALayer(nn.Module):
 
 
 class Block(nn.Module):
-    def __init__(self, conv, dim, kernel_size, ):
+    def __init__(
+        self,
+        conv,
+        dim,
+        kernel_size,
+    ):
         super().__init__()
         self.conv1 = conv(dim, dim, kernel_size, bias=True)
         self.act1 = nn.ReLU(inplace=True)
@@ -80,18 +86,18 @@ class FFA(nn.Module):
         self.g1 = Group(conv, self.dim, kernel_size, blocks=blocks)
         self.g2 = Group(conv, self.dim, kernel_size, blocks=blocks)
         self.g3 = Group(conv, self.dim, kernel_size, blocks=blocks)
-        self.ca = nn.Sequential(*[
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(self.dim * self.gps, self.dim // 4, 1, padding=0),
-            nn.ReLU(inplace=True),
-            nn.Conv2d(self.dim // 4, self.dim * self.gps, 1, padding=0, bias=True),
-            nn.Sigmoid()
-        ])
+        self.ca = nn.Sequential(
+            *[
+                nn.AdaptiveAvgPool2d(1),
+                nn.Conv2d(self.dim * self.gps, self.dim // 4, 1, padding=0),
+                nn.ReLU(inplace=True),
+                nn.Conv2d(self.dim // 4, self.dim * self.gps, 1, padding=0, bias=True),
+                nn.Sigmoid(),
+            ]
+        )
         self.palayer = PALayer(self.dim)
 
-        post_precess = [
-            conv(self.dim, self.dim, kernel_size),
-            conv(self.dim, 3, kernel_size)]
+        post_precess = [conv(self.dim, self.dim, kernel_size), conv(self.dim, 3, kernel_size)]
 
         self.pre = nn.Sequential(*pre_process)
         self.post = nn.Sequential(*post_precess)

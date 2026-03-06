@@ -1,11 +1,21 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['FocalModulation']
+__all__ = ["FocalModulation"]
+
 
 class FocalModulation(nn.Module):
-    def __init__(self, dim, focal_window=3, focal_level=2, focal_factor=2, bias=True, proj_drop=0.,
-                 use_postln_in_modulation=False, normalize_modulator=False):
+    def __init__(
+        self,
+        dim,
+        focal_window=3,
+        focal_level=2,
+        focal_factor=2,
+        bias=True,
+        proj_drop=0.0,
+        use_postln_in_modulation=False,
+        normalize_modulator=False,
+    ):
         super().__init__()
 
         self.dim = dim
@@ -28,8 +38,9 @@ class FocalModulation(nn.Module):
             kernel_size = self.focal_factor * k + self.focal_window
             self.focal_layers.append(
                 nn.Sequential(
-                    nn.Conv2d(dim, dim, kernel_size=kernel_size, stride=1,
-                              groups=dim, padding=kernel_size // 2, bias=False),
+                    nn.Conv2d(
+                        dim, dim, kernel_size=kernel_size, stride=1, groups=dim, padding=kernel_size // 2, bias=False
+                    ),
                     nn.GELU(),
                 )
             )
@@ -40,7 +51,7 @@ class FocalModulation(nn.Module):
     def forward(self, x):
         """
         Args:
-            x: input features with shape of (B, H, W, C)
+            x: input features with shape of (B, H, W, C).
         """
         C = x.shape[1]
 
@@ -48,13 +59,13 @@ class FocalModulation(nn.Module):
         x = self.f_linear(x).contiguous()
         q, ctx, gates = torch.split(x, (C, C, self.focal_level + 1), 1)
 
-        # context aggreation
+        # context aggregation
         ctx_all = 0.0
         for l in range(self.focal_level):
             ctx = self.focal_layers[l](ctx)
-            ctx_all = ctx_all + ctx * gates[:, l:l + 1]
+            ctx_all = ctx_all + ctx * gates[:, l : l + 1]
         ctx_global = self.act(ctx.mean(2, keepdim=True).mean(3, keepdim=True))
-        ctx_all = ctx_all + ctx_global * gates[:, self.focal_level:]
+        ctx_all = ctx_all + ctx_global * gates[:, self.focal_level :]
 
         # normalize context
         if self.normalize_modulator:
@@ -66,7 +77,7 @@ class FocalModulation(nn.Module):
         if self.use_postln_in_modulation:
             x_out = self.ln(x_out)
 
-        # post linear porjection
+        # post linear projection
         x_out = self.proj(x_out)
         x_out = self.proj_drop(x_out)
         return x_out

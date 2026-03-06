@@ -1,31 +1,45 @@
-import re
-import math
 import collections
+import math
+import re
 from functools import partial
+
 import torch
 from torch import nn
 from torch.nn import functional as F
 from torch.utils import model_zoo
 
-__all__ = ['efficient']
+__all__ = ["efficient"]
 
 # Parameters for the entire model (stem, all blocks, and head)
-GlobalParams = collections.namedtuple('GlobalParams', [
-    'width_coefficient', 'depth_coefficient', 'image_size', 'dropout_rate',
-    'num_classes', 'batch_norm_momentum', 'batch_norm_epsilon',
-    'drop_connect_rate', 'depth_divisor', 'min_depth', 'include_top'])
+GlobalParams = collections.namedtuple(
+    "GlobalParams",
+    [
+        "width_coefficient",
+        "depth_coefficient",
+        "image_size",
+        "dropout_rate",
+        "num_classes",
+        "batch_norm_momentum",
+        "batch_norm_epsilon",
+        "drop_connect_rate",
+        "depth_divisor",
+        "min_depth",
+        "include_top",
+    ],
+)
 
 # Parameters for an individual model block
-BlockArgs = collections.namedtuple('BlockArgs', [
-    'num_repeat', 'kernel_size', 'stride', 'expand_ratio',
-    'input_filters', 'output_filters', 'se_ratio', 'id_skip'])
+BlockArgs = collections.namedtuple(
+    "BlockArgs",
+    ["num_repeat", "kernel_size", "stride", "expand_ratio", "input_filters", "output_filters", "se_ratio", "id_skip"],
+)
 
 # Set GlobalParams and BlockArgs's defaults
 GlobalParams.__new__.__defaults__ = (None,) * len(GlobalParams._fields)
 BlockArgs.__new__.__defaults__ = (None,) * len(BlockArgs._fields)
 
 # Swish activation function
-if hasattr(nn, 'SiLU'):
+if hasattr(nn, "SiLU"):
     Swish = nn.SiLU
 else:
     # For compatibility with old PyTorch versions
@@ -55,8 +69,8 @@ class MemoryEfficientSwish(nn.Module):
 
 
 def round_filters(filters, global_params):
-    """Calculate and round number of filters based on width multiplier.
-       Use width_coefficient, depth_divisor and min_depth of global_params.
+    """Calculate and round number of filters based on width multiplier. Use width_coefficient, depth_divisor and
+    min_depth of global_params.
 
     Args:
         filters (int): Filters number to be calculated.
@@ -83,8 +97,7 @@ def round_filters(filters, global_params):
 
 
 def round_repeats(repeats, global_params):
-    """Calculate module's repeat number of a block based on depth multiplier.
-       Use depth_coefficient of global_params.
+    """Calculate module's repeat number of a block based on depth multiplier. Use depth_coefficient of global_params.
 
     Args:
         repeats (int): num_repeat to be calculated.
@@ -97,7 +110,7 @@ def round_repeats(repeats, global_params):
     if not multiplier:
         return repeats
     # follow the formula transferred from official TensorFlow implementation
-    return int(math.ceil(multiplier * repeats))
+    return math.ceil(multiplier * repeats)
 
 
 def drop_connect(inputs, p, training):
@@ -111,7 +124,7 @@ def drop_connect(inputs, p, training):
     Returns:
         output: Output after drop connection.
     """
-    assert 0 <= p <= 1, 'p must be in range of [0,1]'
+    assert 0 <= p <= 1, "p must be in range of [0,1]"
 
     if not training:
         return inputs
@@ -146,8 +159,8 @@ def get_width_and_height_from_size(x):
 
 
 def calculate_output_image_size(input_image_size, stride):
-    """Calculates the output image size when using Conv2dSamePadding with a stride.
-       Necessary for static padding. Thanks to mannatsingh for pointing this out.
+    """Calculates the output image size when using Conv2dSamePadding with a stride. Necessary for static padding. Thanks
+    to mannatsingh for pointing this out.
 
     Args:
         input_image_size (int, tuple or list): Size of input image.
@@ -160,8 +173,8 @@ def calculate_output_image_size(input_image_size, stride):
         return None
     image_height, image_width = get_width_and_height_from_size(input_image_size)
     stride = stride if isinstance(stride, int) else stride[0]
-    image_height = int(math.ceil(image_height / stride))
-    image_width = int(math.ceil(image_width / stride))
+    image_height = math.ceil(image_height / stride)
+    image_width = math.ceil(image_width / stride)
     return [image_height, image_width]
 
 
@@ -170,9 +183,10 @@ def calculate_output_image_size(input_image_size, stride):
 # Only when stride equals 1, can the output size be the same as input size.
 # Don't be confused by their function names ! ! !
 
+
 def get_same_padding_conv2d(image_size=None):
-    """Chooses static padding if you have specified an image size, and dynamic padding otherwise.
-       Static padding is necessary for ONNX exporting of models.
+    """Chooses static padding if you have specified an image size, and dynamic padding otherwise. Static padding is
+    necessary for ONNX exporting of models.
 
     Args:
         image_size (int or tuple): Size of the image.
@@ -187,8 +201,8 @@ def get_same_padding_conv2d(image_size=None):
 
 
 class Conv2dDynamicSamePadding(nn.Conv2d):
-    """2D Convolutions like TensorFlow, for a dynamic image size.
-       The padding is operated in forward function by calculating dynamically.
+    """2D Convolutions like TensorFlow, for a dynamic image size. The padding is operated in forward function by
+    calculating dynamically.
     """
 
     # Tips for 'SAME' mode padding.
@@ -220,8 +234,8 @@ class Conv2dDynamicSamePadding(nn.Conv2d):
 
 
 class Conv2dStaticSamePadding(nn.Conv2d):
-    """2D Convolutions like TensorFlow's 'SAME' mode, with the given input image size.
-       The padding mudule is calculated in construction function, then used in forward.
+    """2D Convolutions like TensorFlow's 'SAME' mode, with the given input image size. The padding module is calculated
+    in construction function, then used in forward.
     """
 
     # With the same calculation as Conv2dDynamicSamePadding
@@ -239,8 +253,7 @@ class Conv2dStaticSamePadding(nn.Conv2d):
         pad_h = max((oh - 1) * self.stride[0] + (kh - 1) * self.dilation[0] + 1 - ih, 0)
         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
         if pad_h > 0 or pad_w > 0:
-            self.static_padding = nn.ZeroPad2d((pad_w // 2, pad_w - pad_w // 2,
-                                                pad_h // 2, pad_h - pad_h // 2))
+            self.static_padding = nn.ZeroPad2d((pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2))
         else:
             self.static_padding = nn.Identity()
 
@@ -251,8 +264,8 @@ class Conv2dStaticSamePadding(nn.Conv2d):
 
 
 def get_same_padding_maxPool2d(image_size=None):
-    """Chooses static padding if you have specified an image size, and dynamic padding otherwise.
-       Static padding is necessary for ONNX exporting of models.
+    """Chooses static padding if you have specified an image size, and dynamic padding otherwise. Static padding is
+    necessary for ONNX exporting of models.
 
     Args:
         image_size (int or tuple): Size of the image.
@@ -267,8 +280,8 @@ def get_same_padding_maxPool2d(image_size=None):
 
 
 class MaxPool2dDynamicSamePadding(nn.MaxPool2d):
-    """2D MaxPooling like TensorFlow's 'SAME' mode, with a dynamic image size.
-       The padding is operated in forward function by calculating dynamically.
+    """2D MaxPooling like TensorFlow's 'SAME' mode, with a dynamic image size. The padding is operated in forward
+    function by calculating dynamically.
     """
 
     def __init__(self, kernel_size, stride, padding=0, dilation=1, return_indices=False, ceil_mode=False):
@@ -286,13 +299,14 @@ class MaxPool2dDynamicSamePadding(nn.MaxPool2d):
         pad_w = max((ow - 1) * self.stride[1] + (kw - 1) * self.dilation[1] + 1 - iw, 0)
         if pad_h > 0 or pad_w > 0:
             x = F.pad(x, [pad_w // 2, pad_w - pad_w // 2, pad_h // 2, pad_h - pad_h // 2])
-        return F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
-                            self.dilation, self.ceil_mode, self.return_indices)
+        return F.max_pool2d(
+            x, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode, self.return_indices
+        )
 
 
 class MaxPool2dStaticSamePadding(nn.MaxPool2d):
-    """2D MaxPooling like TensorFlow's 'SAME' mode, with the given input image size.
-       The padding mudule is calculated in construction function, then used in forward.
+    """2D MaxPooling like TensorFlow's 'SAME' mode, with the given input image size. The padding module is calculated in
+    construction function, then used in forward.
     """
 
     def __init__(self, kernel_size, stride, image_size=None, **kwargs):
@@ -316,8 +330,9 @@ class MaxPool2dStaticSamePadding(nn.MaxPool2d):
 
     def forward(self, x):
         x = self.static_padding(x)
-        x = F.max_pool2d(x, self.kernel_size, self.stride, self.padding,
-                         self.dilation, self.ceil_mode, self.return_indices)
+        x = F.max_pool2d(
+            x, self.kernel_size, self.stride, self.padding, self.dilation, self.ceil_mode, self.return_indices
+        )
         return x
 
 
@@ -332,9 +347,9 @@ class MaxPool2dStaticSamePadding(nn.MaxPool2d):
 # url_map and url_map_advprop: Dicts of url_map for pretrained weights
 # load_pretrained_weights: A function to load pretrained weights
 
-class BlockDecoder(object):
-    """Block Decoder for readability,
-       straight from the official TensorFlow repository.
+
+class BlockDecoder:
+    """Block Decoder for readability, straight from the official TensorFlow repository.
     """
 
     @staticmethod
@@ -343,34 +358,36 @@ class BlockDecoder(object):
 
         Args:
             block_string (str): A string notation of arguments.
-                                Examples: 'r1_k3_s11_e1_i32_o16_se0.25_noskip'.
+            Examples: 'r1_k3_s11_e1_i32_o16_se0.25_noskip'.
 
         Returns:
             BlockArgs: The namedtuple defined at the top of this file.
         """
         assert isinstance(block_string, str)
 
-        ops = block_string.split('_')
+        ops = block_string.split("_")
         options = {}
         for op in ops:
-            splits = re.split(r'(\d.*)', op)
+            splits = re.split(r"(\d.*)", op)
             if len(splits) >= 2:
                 key, value = splits[:2]
                 options[key] = value
 
         # Check stride
-        assert (('s' in options and len(options['s']) == 1) or
-                (len(options['s']) == 2 and options['s'][0] == options['s'][1]))
+        assert ("s" in options and len(options["s"]) == 1) or (
+            len(options["s"]) == 2 and options["s"][0] == options["s"][1]
+        )
 
         return BlockArgs(
-            num_repeat=int(options['r']),
-            kernel_size=int(options['k']),
-            stride=[int(options['s'][0])],
-            expand_ratio=int(options['e']),
-            input_filters=int(options['i']),
-            output_filters=int(options['o']),
-            se_ratio=float(options['se']) if 'se' in options else None,
-            id_skip=('noskip' not in block_string))
+            num_repeat=int(options["r"]),
+            kernel_size=int(options["k"]),
+            stride=[int(options["s"][0])],
+            expand_ratio=int(options["e"]),
+            input_filters=int(options["i"]),
+            output_filters=int(options["o"]),
+            se_ratio=float(options["se"]) if "se" in options else None,
+            id_skip=("noskip" not in block_string),
+        )
 
     @staticmethod
     def _encode_block_string(block):
@@ -383,18 +400,18 @@ class BlockDecoder(object):
             block_string: A String form of BlockArgs.
         """
         args = [
-            'r%d' % block.num_repeat,
-            'k%d' % block.kernel_size,
-            's%d%d' % (block.strides[0], block.strides[1]),
-            'e%s' % block.expand_ratio,
-            'i%d' % block.input_filters,
-            'o%d' % block.output_filters
+            "r%d" % block.num_repeat,
+            "k%d" % block.kernel_size,
+            "s%d%d" % (block.strides[0], block.strides[1]),
+            f"e{block.expand_ratio}",
+            "i%d" % block.input_filters,
+            "o%d" % block.output_filters,
         ]
         if 0 < block.se_ratio <= 1:
-            args.append('se%s' % block.se_ratio)
+            args.append(f"se{block.se_ratio}")
         if block.id_skip is False:
-            args.append('noskip')
-        return '_'.join(args)
+            args.append("noskip")
+        return "_".join(args)
 
     @staticmethod
     def decode(string_list):
@@ -439,48 +456,50 @@ def efficientnet_params(model_name):
     """
     params_dict = {
         # Coefficients:   width,depth,res,dropout
-        'efficientnet-b0': (1.0, 1.0, 224, 0.2),
-        'efficientnet-b1': (1.0, 1.1, 240, 0.2),
-        'efficientnet-b2': (1.1, 1.2, 260, 0.3),
-        'efficientnet-b3': (1.2, 1.4, 300, 0.3),
-        'efficientnet-b4': (1.4, 1.8, 380, 0.4),
-        'efficientnet-b5': (1.6, 2.2, 456, 0.4),
-        'efficientnet-b6': (1.8, 2.6, 528, 0.5),
-        'efficientnet-b7': (2.0, 3.1, 600, 0.5),
-        'efficientnet-b8': (2.2, 3.6, 672, 0.5),
-        'efficientnet-l2': (4.3, 5.3, 800, 0.5),
+        "efficientnet-b0": (1.0, 1.0, 224, 0.2),
+        "efficientnet-b1": (1.0, 1.1, 240, 0.2),
+        "efficientnet-b2": (1.1, 1.2, 260, 0.3),
+        "efficientnet-b3": (1.2, 1.4, 300, 0.3),
+        "efficientnet-b4": (1.4, 1.8, 380, 0.4),
+        "efficientnet-b5": (1.6, 2.2, 456, 0.4),
+        "efficientnet-b6": (1.8, 2.6, 528, 0.5),
+        "efficientnet-b7": (2.0, 3.1, 600, 0.5),
+        "efficientnet-b8": (2.2, 3.6, 672, 0.5),
+        "efficientnet-l2": (4.3, 5.3, 800, 0.5),
     }
     return params_dict[model_name]
 
 
-def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None,
-                 dropout_rate=0.2, drop_connect_rate=0.2, num_classes=1000, include_top=True):
+def efficientnet(
+    width_coefficient=None,
+    depth_coefficient=None,
+    image_size=None,
+    dropout_rate=0.2,
+    drop_connect_rate=0.2,
+    num_classes=1000,
+    include_top=True,
+):
     """Create BlockArgs and GlobalParams for efficientnet model.
 
     Args:
-        width_coefficient (float)
-        depth_coefficient (float)
-        image_size (int)
-        dropout_rate (float)
-        drop_connect_rate (float)
-        num_classes (int)
+        width_coefficient (float): depth_coefficient (float) image_size (int) dropout_rate (float) drop_connect_rate
+            (float) num_classes (int)
 
         Meaning as the name suggests.
 
     Returns:
         blocks_args, global_params.
     """
-
     # Blocks args for the whole model(efficientnet-b0 by default)
     # It will be modified in the construction of EfficientNet Class according to model
     blocks_args = [
-        'r1_k3_s11_e1_i32_o16_se0.25',
-        'r2_k3_s22_e6_i16_o24_se0.25',
-        'r2_k5_s22_e6_i24_o40_se0.25',
-        'r3_k3_s22_e6_i40_o80_se0.25',
-        'r3_k5_s11_e6_i80_o112_se0.25',
-        'r4_k5_s22_e6_i112_o192_se0.25',
-        'r1_k3_s11_e6_i192_o320_se0.25',
+        "r1_k3_s11_e1_i32_o16_se0.25",
+        "r2_k3_s22_e6_i16_o24_se0.25",
+        "r2_k5_s22_e6_i24_o40_se0.25",
+        "r3_k3_s22_e6_i40_o80_se0.25",
+        "r3_k5_s11_e6_i80_o112_se0.25",
+        "r4_k5_s22_e6_i112_o192_se0.25",
+        "r1_k3_s11_e6_i192_o320_se0.25",
     ]
     blocks_args = BlockDecoder.decode(blocks_args)
 
@@ -489,7 +508,6 @@ def efficientnet(width_coefficient=None, depth_coefficient=None, image_size=None
         depth_coefficient=depth_coefficient,
         image_size=image_size,
         dropout_rate=dropout_rate,
-
         num_classes=num_classes,
         batch_norm_momentum=0.99,
         batch_norm_epsilon=1e-3,
@@ -512,13 +530,14 @@ def get_model_params(model_name, override_params):
     Returns:
         blocks_args, global_params
     """
-    if model_name.startswith('efficientnet'):
+    if model_name.startswith("efficientnet"):
         w, d, s, p = efficientnet_params(model_name)
         # note: all models have drop connect rate = 0.2
         blocks_args, global_params = efficientnet(
-            width_coefficient=w, depth_coefficient=d, dropout_rate=p, image_size=s)
+            width_coefficient=w, depth_coefficient=d, dropout_rate=p, image_size=s
+        )
     else:
-        raise NotImplementedError('model name is not pre-defined: {}'.format(model_name))
+        raise NotImplementedError(f"model name is not pre-defined: {model_name}")
     if override_params:
         # ValueError will be raised here if override_params has fields not included in global_params.
         global_params = global_params._replace(**override_params)
@@ -528,28 +547,28 @@ def get_model_params(model_name, override_params):
 # train with Standard methods
 # check more details in paper(EfficientNet: Rethinking Model Scaling for Convolutional Neural Networks)
 url_map = {
-    'efficientnet-b0': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b0-355c32eb.pth',
-    'efficientnet-b1': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b1-f1951068.pth',
-    'efficientnet-b2': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b2-8bb594d6.pth',
-    'efficientnet-b3': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b3-5fb5a3c3.pth',
-    'efficientnet-b4': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b4-6ed6700e.pth',
-    'efficientnet-b5': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b5-b6417697.pth',
-    'efficientnet-b6': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b6-c76e70fd.pth',
-    'efficientnet-b7': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b7-dcc49843.pth',
+    "efficientnet-b0": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b0-355c32eb.pth",
+    "efficientnet-b1": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b1-f1951068.pth",
+    "efficientnet-b2": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b2-8bb594d6.pth",
+    "efficientnet-b3": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b3-5fb5a3c3.pth",
+    "efficientnet-b4": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b4-6ed6700e.pth",
+    "efficientnet-b5": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b5-b6417697.pth",
+    "efficientnet-b6": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b6-c76e70fd.pth",
+    "efficientnet-b7": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/efficientnet-b7-dcc49843.pth",
 }
 
 # train with Adversarial Examples(AdvProp)
 # check more details in paper(Adversarial Examples Improve Image Recognition)
 url_map_advprop = {
-    'efficientnet-b0': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b0-b64d5a18.pth',
-    'efficientnet-b1': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b1-0f3ce85a.pth',
-    'efficientnet-b2': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b2-6e9d97e5.pth',
-    'efficientnet-b3': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b3-cdd7c0f4.pth',
-    'efficientnet-b4': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b4-44fb3a87.pth',
-    'efficientnet-b5': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b5-86493f6b.pth',
-    'efficientnet-b6': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b6-ac80338e.pth',
-    'efficientnet-b7': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b7-4652b6dd.pth',
-    'efficientnet-b8': 'https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b8-22a8fe65.pth',
+    "efficientnet-b0": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b0-b64d5a18.pth",
+    "efficientnet-b1": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b1-0f3ce85a.pth",
+    "efficientnet-b2": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b2-6e9d97e5.pth",
+    "efficientnet-b3": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b3-cdd7c0f4.pth",
+    "efficientnet-b4": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b4-44fb3a87.pth",
+    "efficientnet-b5": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b5-86493f6b.pth",
+    "efficientnet-b6": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b6-ac80338e.pth",
+    "efficientnet-b7": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b7-4652b6dd.pth",
+    "efficientnet-b8": "https://github.com/lukemelas/EfficientNet-PyTorch/releases/download/1.0/adv-efficientnet-b8-22a8fe65.pth",
 }
 
 # TODO: add the petrained weights url map of 'efficientnet-l2'
@@ -562,11 +581,10 @@ def load_pretrained_weights(model, model_name, weights_path=None, load_fc=True, 
         model (Module): The whole model of efficientnet.
         model_name (str): Model name of efficientnet.
         weights_path (None or str):
-            str: path to pretrained weights file on the local disk.
-            None: use pretrained weights downloaded from the Internet.
+        str: path to pretrained weights file on the local disk.
+        None: use pretrained weights downloaded from the Internet.
         load_fc (bool): Whether to load pretrained weights for fc layer at the end of the model.
-        advprop (bool): Whether to load pretrained weights
-                        trained with advprop (valid when weights_path is None).
+        advprop (bool): Whether to load pretrained weights trained with advprop (valid when weights_path is None).
     """
     if isinstance(weights_path, str):
         state_dict = torch.load(weights_path)
@@ -577,26 +595,32 @@ def load_pretrained_weights(model, model_name, weights_path=None, load_fc=True, 
 
     if load_fc:
         ret = model.load_state_dict(state_dict, strict=False)
-        assert not ret.missing_keys, 'Missing keys when loading pretrained weights: {}'.format(ret.missing_keys)
+        assert not ret.missing_keys, f"Missing keys when loading pretrained weights: {ret.missing_keys}"
     else:
-        state_dict.pop('_fc.weight')
-        state_dict.pop('_fc.bias')
+        state_dict.pop("_fc.weight")
+        state_dict.pop("_fc.bias")
         ret = model.load_state_dict(state_dict, strict=False)
-        assert set(ret.missing_keys) == set(
-            ['_fc.weight', '_fc.bias']), 'Missing keys when loading pretrained weights: {}'.format(ret.missing_keys)
-    assert not ret.unexpected_keys, 'Missing keys when loading pretrained weights: {}'.format(ret.unexpected_keys)
+        assert set(ret.missing_keys) == set(["_fc.weight", "_fc.bias"]), (
+            f"Missing keys when loading pretrained weights: {ret.missing_keys}"
+        )
+    assert not ret.unexpected_keys, f"Missing keys when loading pretrained weights: {ret.unexpected_keys}"
 
     if verbose:
-        print('Loaded pretrained weights for {}'.format(model_name))
+        print(f"Loaded pretrained weights for {model_name}")
 
 
 VALID_MODELS = (
-    'efficientnet-b0', 'efficientnet-b1', 'efficientnet-b2', 'efficientnet-b3',
-    'efficientnet-b4', 'efficientnet-b5', 'efficientnet-b6', 'efficientnet-b7',
-    'efficientnet-b8',
-
+    "efficientnet-b0",
+    "efficientnet-b1",
+    "efficientnet-b2",
+    "efficientnet-b3",
+    "efficientnet-b4",
+    "efficientnet-b5",
+    "efficientnet-b6",
+    "efficientnet-b7",
+    "efficientnet-b8",
     # Support the construction of 'efficientnet-l2' without pretrained weights
-    'efficientnet-l2'
+    "efficientnet-l2",
 )
 
 
@@ -636,8 +660,13 @@ class MBConvBlock(nn.Module):
         s = self._block_args.stride
         Conv2d = get_same_padding_conv2d(image_size=image_size)
         self._depthwise_conv = Conv2d(
-            in_channels=oup, out_channels=oup, groups=oup,  # groups makes it depthwise
-            kernel_size=k, stride=s, bias=False)
+            in_channels=oup,
+            out_channels=oup,
+            groups=oup,  # groups makes it depthwise
+            kernel_size=k,
+            stride=s,
+            bias=False,
+        )
         self._bn1 = nn.BatchNorm2d(num_features=oup, momentum=self._bn_mom, eps=self._bn_eps)
         image_size = calculate_output_image_size(image_size, s)
 
@@ -665,7 +694,6 @@ class MBConvBlock(nn.Module):
         Returns:
             Output of this block after processing.
         """
-
         # Expansion and Depthwise Convolution
         x = inputs
         if self._block_args.expand_ratio != 1:
@@ -708,12 +736,10 @@ class MBConvBlock(nn.Module):
 
 
 class EfficientNet(nn.Module):
-
-
     def __init__(self, blocks_args=None, global_params=None):
         super().__init__()
-        assert isinstance(blocks_args, list), 'blocks_args should be a list'
-        assert len(blocks_args) > 0, 'block args must be greater than 0'
+        assert isinstance(blocks_args, list), "blocks_args should be a list"
+        assert len(blocks_args) > 0, "block args must be greater than 0"
         self._global_params = global_params
         self._blocks_args = blocks_args
 
@@ -735,12 +761,11 @@ class EfficientNet(nn.Module):
         # Build blocks
         self._blocks = nn.ModuleList([])
         for block_args in self._blocks_args:
-
             # Update block input and output filters based on depth multiplier.
             block_args = block_args._replace(
                 input_filters=round_filters(block_args.input_filters, self._global_params),
                 output_filters=round_filters(block_args.output_filters, self._global_params),
-                num_repeat=round_repeats(block_args.num_repeat, self._global_params)
+                num_repeat=round_repeats(block_args.num_repeat, self._global_params),
             )
 
             # The first block needs to take care of stride and filter size increase.
@@ -768,8 +793,10 @@ class EfficientNet(nn.Module):
         # set activation to memory efficient swish by default
         self._swish = MemoryEfficientSwish()
         self.width_list = [i.size(1) for i in self.forward(torch.randn(1, 3, 640, 640))]
+
     def set_swish(self, memory_efficient=True):
         """Sets swish function as memory efficient (for training) or standard (for export).
+
         Args:
             memory_efficient (bool): Whether to use memory-efficient version of swish.
         """
@@ -813,19 +840,19 @@ class EfficientNet(nn.Module):
                 drop_connect_rate *= float(idx) / len(self._blocks)  # scale drop connect_rate
             x = block(x, drop_connect_rate=drop_connect_rate)
             if prev_x.size(2) > x.size(2):
-                endpoints['reduction_{}'.format(len(endpoints) + 1)] = prev_x
+                endpoints[f"reduction_{len(endpoints) + 1}"] = prev_x
             elif idx == len(self._blocks) - 1:
-                endpoints['reduction_{}'.format(len(endpoints) + 1)] = x
+                endpoints[f"reduction_{len(endpoints) + 1}"] = x
             prev_x = x
 
         # Head
         x = self._swish(self._bn1(self._conv_head(x)))
-        endpoints['reduction_{}'.format(len(endpoints) + 1)] = x
+        endpoints[f"reduction_{len(endpoints) + 1}"] = x
 
         return endpoints
 
     def forward(self, inputs):
-        """use convolution layer to extract feature .
+        """Use convolution layer to extract feature .
 
         Args:
             inputs (tensor): Input tensor.
@@ -856,8 +883,7 @@ class EfficientNet(nn.Module):
         Args:
             model_name (str): Name for efficientnet.
             in_channels (int): Input data's channel number.
-            override_params (other key word params):
-                Params to override model's global_params.
+            override_params (other key word params): Params to override model's global_params.
                 Optional key:
                     'width_coefficient', 'depth_coefficient',
                     'image_size', 'dropout_rate',
@@ -875,24 +901,21 @@ class EfficientNet(nn.Module):
         return model
 
     @classmethod
-    def from_pretrained(cls, model_name, weights_path=None, advprop=False,
-                        in_channels=3, num_classes=1000, **override_params):
+    def from_pretrained(
+        cls, model_name, weights_path=None, advprop=False, in_channels=3, num_classes=1000, **override_params
+    ):
         """Create an efficientnet model according to name.
 
         Args:
             model_name (str): Name for efficientnet.
             weights_path (None or str):
-                str: path to pretrained weights file on the local disk.
-                None: use pretrained weights downloaded from the Internet.
-            advprop (bool):
-                Whether to load pretrained weights
-                trained with advprop (valid when weights_path is None).
+            str: path to pretrained weights file on the local disk.
+            None: use pretrained weights downloaded from the Internet.
+            advprop (bool): Whether to load pretrained weights trained with advprop (valid when weights_path is None).
             in_channels (int): Input data's channel number.
-            num_classes (int):
-                Number of categories for classification.
-                It controls the output size for final linear layer.
-            override_params (other key word params):
-                Params to override model's global_params.
+            num_classes (int): Number of categories for classification. It controls the output size for final linear
+                layer.
+            override_params (other key word params): Params to override model's global_params.
                 Optional key:
                     'width_coefficient', 'depth_coefficient',
                     'image_size', 'dropout_rate',
@@ -904,8 +927,9 @@ class EfficientNet(nn.Module):
             A pretrained efficientnet model.
         """
         model = cls.from_name(model_name, num_classes=num_classes, **override_params)
-        load_pretrained_weights(model, model_name, weights_path=weights_path,
-                                load_fc=(num_classes == 1000), advprop=advprop)
+        load_pretrained_weights(
+            model, model_name, weights_path=weights_path, load_fc=(num_classes == 1000), advprop=advprop
+        )
         model._change_in_channels(in_channels)
         return model
 
@@ -934,7 +958,7 @@ class EfficientNet(nn.Module):
             bool: Is a valid name or not.
         """
         if model_name not in VALID_MODELS:
-            raise ValueError('model_name should be one of: ' + ', '.join(VALID_MODELS))
+            raise ValueError("model_name should be one of: " + ", ".join(VALID_MODELS))
 
     def _change_in_channels(self, in_channels):
         """Adjust model's first convolution layer to in_channels, if in_channels not equals 3.
@@ -948,16 +972,15 @@ class EfficientNet(nn.Module):
             self._conv_stem = Conv2d(in_channels, out_channels, kernel_size=3, stride=2, bias=False)
 
 
-def efficient(model_name='efficientnet-b0', pretrained=False):
+def efficient(model_name="efficientnet-b0", pretrained=False):
     if pretrained:
-        model = EfficientNet.from_pretrained('{}'.format(model_name))
+        model = EfficientNet.from_pretrained(f"{model_name}")
     else:
-        model = EfficientNet.from_name('{}'.format(model_name))
+        model = EfficientNet.from_name(f"{model_name}")
     return model
 
+
 if __name__ == "__main__":
-
-
     # VALID_MODELS = (
     #     'efficientnet-b0', 'efficientnet-b1', 'efficientnet-b2', 'efficientnet-b3',
     #     'efficientnet-b4', 'efficientnet-b5', 'efficientnet-b6', 'efficientnet-b7',
@@ -971,7 +994,7 @@ if __name__ == "__main__":
     image = torch.rand(*image_size)
 
     # Model
-    model = efficient('efficientnet-b0')
+    model = efficient("efficientnet-b0")
 
     out = model(image)
     print(len(out))

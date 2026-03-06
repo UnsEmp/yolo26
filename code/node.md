@@ -216,6 +216,7 @@ YOLOv6的核心架构包括：
 **4.3.2 消融实验：各优化模块有效性测试**
 
 设置实验组：
+
 - Baseline + CA注意力
 - Baseline + BiFPN
 - Baseline + MPDIoU损失
@@ -327,26 +328,25 @@ YOLOv6的核心架构包括：
 - 探索与自动化饲喂设备联动，实现精准饲喂闭环
 - 推动模型在放牧机器人、规模化养殖园区的规模化应用
 
-
 **参考文献**
 
-[1] 中国农业科学院农业信息研究所. 放牧机器人"慧眼识牛"[N]. 人民日报海外版, 2026-01-19. 
+[1] 中国农业科学院农业信息研究所. 放牧机器人"慧眼识牛"[N]. 人民日报海外版, 2026-01-19.
 
-[2] YOLOv6+: simple and optimized object detection model for INT8 quantized inference on mobile devices[J]. Signal, Image and Video Processing, 2025, 19: 665. 
+[2] YOLOv6+: simple and optimized object detection model for INT8 quantized inference on mobile devices[J]. Signal, Image and Video Processing, 2025, 19: 665.
 
-[3] 段宇晨, 方振宇, 郑江滨. 神经网络轻量化综述[J]. 计算机科学与探索, 2025, 19(4): 835. 
+[3] 段宇晨, 方振宇, 郑江滨. 神经网络轻量化综述[J]. 计算机科学与探索, 2025, 19(4): 835.
 
-[4] Semi-automated annotation for video-based beef cattle behavior recognition[J]. Scientific Reports, 2025, 15: 17131. 
+[4] Semi-automated annotation for video-based beef cattle behavior recognition[J]. Scientific Reports, 2025, 15: 17131.
 
-[5] 美团视觉智能部. YOLOv6: 又快又准的目标检测框架[EB/OL]. GitHub, 2022. 
+[5] 美团视觉智能部. YOLOv6: 又快又准的目标检测框架[EB/OL]. GitHub, 2022.
 
-[6] Guan H, Lv J, Chen X, et al. Lightweighting Large Models: A Review of Model Compression Techniques[J]. Data Intelligence, 2025. 
+[6] Guan H, Lv J, Chen X, et al. Lightweighting Large Models: A Review of Model Compression Techniques[J]. Data Intelligence, 2025.
 
-[7] 基于YOLOv8的牛行为检测识别项目[EB/OL]. 阿里云开发者社区, 2025. 
+[7] 基于YOLOv8的牛行为检测识别项目[EB/OL]. 阿里云开发者社区, 2025.
 
-[8] 放牧机器人"慧眼识牛"[EB/OL]. 中国网, 2026-01-20. 
+[8] 放牧机器人"慧眼识牛"[EB/OL]. 中国网, 2026-01-20.
 
-[9] 劲爆！YOLOv6又快又准的目标检测框架开源啦[EB/OL]. 腾讯云开发者社区, 2022. 
+[9] 劲爆！YOLOv6又快又准的目标检测框架开源啦[EB/OL]. 腾讯云开发者社区, 2022.
 
 **附录**
 

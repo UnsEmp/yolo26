@@ -1,8 +1,10 @@
-import torch
-import torch.nn as nn
 import math
 
-__all__ = ['DCNv2', 'C2f_DCNv2']
+import torch
+import torch.nn as nn
+
+__all__ = ["C2f_DCNv2", "DCNv2"]
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -13,9 +15,9 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
     return p
 
 
-
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -35,9 +37,10 @@ class Conv(nn.Module):
 
 
 class DCNv2(nn.Module):
-    def __init__(self, in_channels, out_channels, kernel_size=3, stride=1,
-                 padding=1, dilation=1, groups=1, deformable_groups=1):
-        super(DCNv2, self).__init__()
+    def __init__(
+        self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, dilation=1, groups=1, deformable_groups=1
+    ):
+        super().__init__()
 
         self.in_channels = in_channels
         self.out_channels = out_channels
@@ -48,13 +51,10 @@ class DCNv2(nn.Module):
         self.groups = groups
         self.deformable_groups = deformable_groups
 
-        self.weight = nn.Parameter(
-            torch.empty(out_channels, in_channels, *self.kernel_size)
-        )
+        self.weight = nn.Parameter(torch.empty(out_channels, in_channels, *self.kernel_size))
         self.bias = nn.Parameter(torch.empty(out_channels))
 
-        out_channels_offset_mask = (self.deformable_groups * 3 *
-                                    self.kernel_size[0] * self.kernel_size[1])
+        out_channels_offset_mask = self.deformable_groups * 3 * self.kernel_size[0] * self.kernel_size[1]
         self.conv_offset_mask = nn.Conv2d(
             self.in_channels,
             out_channels_offset_mask,
@@ -78,12 +78,15 @@ class DCNv2(nn.Module):
             offset,
             mask,
             self.bias,
-            self.stride[0], self.stride[1],
-            self.padding[0], self.padding[1],
-            self.dilation[0], self.dilation[1],
+            self.stride[0],
+            self.stride[1],
+            self.padding[0],
+            self.padding[1],
+            self.dilation[0],
+            self.dilation[1],
             self.groups,
             self.deformable_groups,
-            True
+            True,
         )
         x = self.bn(x)
         x = self.act(x)
@@ -93,7 +96,7 @@ class DCNv2(nn.Module):
         n = self.in_channels
         for k in self.kernel_size:
             n *= k
-        std = 1. / math.sqrt(n)
+        std = 1.0 / math.sqrt(n)
         self.weight.data.uniform_(-std, std)
         self.bias.data.zero_()
         self.conv_offset_mask.weight.data.zero_()

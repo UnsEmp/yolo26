@@ -11,17 +11,14 @@ class Lap_Pyramid_Conv(nn.Module):
         self.kernel = self.gauss_kernel(kernel_size, channels)
 
     def gauss_kernel(self, kernel_size, channels):
-        kernel = cv2.getGaussianKernel(kernel_size, 0).dot(
-            cv2.getGaussianKernel(kernel_size, 0).T)
-        kernel = torch.FloatTensor(kernel).unsqueeze(0).repeat(
-            channels, 1, 1, 1)
+        kernel = cv2.getGaussianKernel(kernel_size, 0).dot(cv2.getGaussianKernel(kernel_size, 0).T)
+        kernel = torch.FloatTensor(kernel).unsqueeze(0).repeat(channels, 1, 1, 1)
         kernel = torch.nn.Parameter(data=kernel, requires_grad=False)
         return kernel
 
     def conv_gauss(self, x, kernel):
         n_channels, _, kw, kh = kernel.shape
-        x = torch.nn.functional.pad(x, (kw // 2, kh // 2, kw // 2, kh // 2),
-                                    mode='reflect')  # replicate    # reflect
+        x = torch.nn.functional.pad(x, (kw // 2, kh // 2, kw // 2, kh // 2), mode="reflect")  # replicate    # reflect
         x = torch.nn.functional.conv2d(x, kernel, groups=n_channels)
         return x
 
@@ -32,8 +29,7 @@ class Lap_Pyramid_Conv(nn.Module):
         return self.downsample(self.conv_gauss(x, self.kernel))
 
     def upsample(self, x):
-        up = torch.zeros((x.size(0), x.size(1), x.size(2) * 2, x.size(3) * 2),
-                         device=x.device)
+        up = torch.zeros((x.size(0), x.size(1), x.size(2) * 2, x.size(3) * 2), device=x.device)
         up[:, :, ::2, ::2] = x * 4
 
         return self.conv_gauss(up, self.kernel)
@@ -75,16 +71,13 @@ class ResidualBlock(nn.Module):
 
 
 class PENet(nn.Module):
-
-    def __init__(self,
-                 num_high=3,
-                 gauss_kernel=5):
+    def __init__(self, num_high=3, gauss_kernel=5):
         super().__init__()
         self.num_high = num_high
         self.lap_pyramid = Lap_Pyramid_Conv(num_high, gauss_kernel)
 
         for i in range(0, self.num_high + 1):
-            self.__setattr__('AE_{}'.format(i), AE(3))
+            self.__setattr__(f"AE_{i}", AE(3))
 
     def forward(self, x):
         pyrs = self.lap_pyramid.pyramid_decom(img=x)
@@ -92,8 +85,7 @@ class PENet(nn.Module):
         trans_pyrs = []
 
         for i in range(self.num_high + 1):
-            trans_pyr = self.__getattr__('AE_{}'.format(i))(
-                pyrs[-1 - i])
+            trans_pyr = self.__getattr__(f"AE_{i}")(pyrs[-1 - i])
             trans_pyrs.append(trans_pyr)
         out = self.lap_pyramid.pyramid_recons(trans_pyrs)
 
@@ -102,7 +94,7 @@ class PENet(nn.Module):
 
 class DPM(nn.Module):
     def __init__(self, inplanes, planes, act=nn.LeakyReLU(negative_slope=0.2, inplace=True), bias=False):
-        super(DPM, self).__init__()
+        super().__init__()
 
         self.conv_mask = nn.Conv2d(inplanes, 1, kernel_size=1, bias=bias)
         self.softmax = nn.Softmax(dim=2)
@@ -111,7 +103,7 @@ class DPM(nn.Module):
         self.channel_add_conv = nn.Sequential(
             nn.Conv2d(inplanes, planes, kernel_size=1, bias=bias),
             act,
-            nn.Conv2d(planes, inplanes, kernel_size=1, bias=bias)
+            nn.Conv2d(planes, inplanes, kernel_size=1, bias=bias),
         )
 
     def spatial_pool(self, x):
@@ -168,17 +160,12 @@ def sobel(img):
 
 class AE(nn.Module):
     def __init__(self, n_feat, reduction=8, bias=False, act=nn.LeakyReLU(negative_slope=0.2, inplace=True), groups=1):
-        super(AE, self).__init__()
+        super().__init__()
 
         self.n_feat = n_feat
         self.groups = groups
         self.reduction = reduction
-        self.agg = nn.Conv2d(6,
-                             3,
-                             1,
-                             stride=1,
-                             padding=0,
-                             bias=False)
+        self.agg = nn.Conv2d(6, 3, 1, stride=1, padding=0, bias=False)
         self.conv_edge = nn.Conv2d(3, 3, kernel_size=1, bias=bias)
 
         self.res1 = ResidualBlock(3, 32)
@@ -226,7 +213,7 @@ class LowPassModule(nn.Module):
     def forward(self, feats):
         h, w = feats.size(2), feats.size(3)
         feats = torch.split(feats, self.channel_splits, dim=1)
-        priors = [F.upsample(input=self.stages[i](feats[i]), size=(h, w), mode='bilinear') for i in range(4)]
+        priors = [F.upsample(input=self.stages[i](feats[i]), size=(h, w), mode="bilinear") for i in range(4)]
         bottle = torch.cat(priors, 1)
         return self.relu(bottle)
 

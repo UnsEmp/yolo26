@@ -1,7 +1,10 @@
+import math
+
 import torch
 import torch.nn as nn
-import math
-__all__ = ['VoVGSCSP', 'VoVGSCSPC', 'GSConv', 'DWConv']
+
+__all__ = ["DWConv", "GSConv", "VoVGSCSP", "VoVGSCSPC"]
+
 
 def autopad(k, p=None):  # kernel, padding
     # Pad to 'same'
@@ -63,11 +66,9 @@ class GSBottleneck(nn.Module):
     # GS Bottleneck https://github.com/AlanLi1997/slim-neck-by-gsconv
     def __init__(self, c1, c2, k=3, s=1, e=0.5):
         super().__init__()
-        c_ = int(c2*e)
+        c_ = int(c2 * e)
         # for lighting
-        self.conv_lighting = nn.Sequential(
-            GSConv(c1, c_, 1, 1),
-            GSConv(c_, c2, 3, 1, act=False))
+        self.conv_lighting = nn.Sequential(GSConv(c1, c_, 1, 1), GSConv(c_, c2, 3, 1, act=False))
         self.shortcut = Conv(c1, c2, 1, 1, act=False)
 
     def forward(self, x):
