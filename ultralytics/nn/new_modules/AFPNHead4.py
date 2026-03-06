@@ -1,13 +1,15 @@
 import math
 from collections import OrderedDict
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
+
 from ultralytics.nn.modules import DFL
 from ultralytics.nn.modules.conv import Conv
 from ultralytics.utils.tal import dist2bbox, make_anchors
 
-__all__ = ['Detect_AFPN4']
+__all__ = ["Detect_AFPN4"]
 
 
 def BasicConv(filter_in, filter_out, kernel_size, stride=1, pad=None):
@@ -15,18 +17,25 @@ def BasicConv(filter_in, filter_out, kernel_size, stride=1, pad=None):
         pad = (kernel_size - 1) // 2 if kernel_size else 0
     else:
         pad = pad
-    return nn.Sequential(OrderedDict([
-        ("conv", nn.Conv2d(filter_in, filter_out, kernel_size=kernel_size, stride=stride, padding=pad, bias=False)),
-        ("bn", nn.BatchNorm2d(filter_out)),
-        ("relu", nn.ReLU(inplace=True)),
-    ]))
+    return nn.Sequential(
+        OrderedDict(
+            [
+                (
+                    "conv",
+                    nn.Conv2d(filter_in, filter_out, kernel_size=kernel_size, stride=stride, padding=pad, bias=False),
+                ),
+                ("bn", nn.BatchNorm2d(filter_out)),
+                ("relu", nn.ReLU(inplace=True)),
+            ]
+        )
+    )
 
 
 class BasicBlock(nn.Module):
     expansion = 1
 
     def __init__(self, filter_in, filter_out):
-        super(BasicBlock, self).__init__()
+        super().__init__()
         self.conv1 = nn.Conv2d(filter_in, filter_out, 3, padding=1)
         self.bn1 = nn.BatchNorm2d(filter_out, momentum=0.1)
         self.relu = nn.ReLU(inplace=True)
@@ -51,11 +60,10 @@ class BasicBlock(nn.Module):
 
 class Upsample(nn.Module):
     def __init__(self, in_channels, out_channels, scale_factor=2):
-        super(Upsample, self).__init__()
+        super().__init__()
 
         self.upsample = nn.Sequential(
-            BasicConv(in_channels, out_channels, 1),
-            nn.Upsample(scale_factor=scale_factor, mode='bilinear')
+            BasicConv(in_channels, out_channels, 1), nn.Upsample(scale_factor=scale_factor, mode="bilinear")
         )
 
     def forward(self, x):
@@ -66,13 +74,14 @@ class Upsample(nn.Module):
 
 class Downsample_x2(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(Downsample_x2, self).__init__()
+        super().__init__()
 
-        self.downsample = nn.Sequential(
-            BasicConv(in_channels, out_channels, 2, 2, 0)
-        )
+        self.downsample = nn.Sequential(BasicConv(in_channels, out_channels, 2, 2, 0))
 
-    def forward(self, x, ):
+    def forward(
+        self,
+        x,
+    ):
         x = self.downsample(x)
 
         return x
@@ -80,13 +89,14 @@ class Downsample_x2(nn.Module):
 
 class Downsample_x4(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(Downsample_x4, self).__init__()
+        super().__init__()
 
-        self.downsample = nn.Sequential(
-            BasicConv(in_channels, out_channels, 4, 4, 0)
-        )
+        self.downsample = nn.Sequential(BasicConv(in_channels, out_channels, 4, 4, 0))
 
-    def forward(self, x, ):
+    def forward(
+        self,
+        x,
+    ):
         x = self.downsample(x)
 
         return x
@@ -94,13 +104,14 @@ class Downsample_x4(nn.Module):
 
 class Downsample_x8(nn.Module):
     def __init__(self, in_channels, out_channels):
-        super(Downsample_x8, self).__init__()
+        super().__init__()
 
-        self.downsample = nn.Sequential(
-            BasicConv(in_channels, out_channels, 8, 8, 0)
-        )
+        self.downsample = nn.Sequential(BasicConv(in_channels, out_channels, 8, 8, 0))
 
-    def forward(self, x, ):
+    def forward(
+        self,
+        x,
+    ):
         x = self.downsample(x)
 
         return x
@@ -108,7 +119,7 @@ class Downsample_x8(nn.Module):
 
 class ASFF_2(nn.Module):
     def __init__(self, inter_dim=512):
-        super(ASFF_2, self).__init__()
+        super().__init__()
 
         self.inter_dim = inter_dim
         compress_c = 8
@@ -128,8 +139,7 @@ class ASFF_2(nn.Module):
         levels_weight = self.weight_levels(levels_weight_v)
         levels_weight = F.softmax(levels_weight, dim=1)
 
-        fused_out_reduced = input1 * levels_weight[:, 0:1, :, :] + \
-                            input2 * levels_weight[:, 1:2, :, :]
+        fused_out_reduced = input1 * levels_weight[:, 0:1, :, :] + input2 * levels_weight[:, 1:2, :, :]
 
         out = self.conv(fused_out_reduced)
 
@@ -138,7 +148,7 @@ class ASFF_2(nn.Module):
 
 class ASFF_3(nn.Module):
     def __init__(self, inter_dim=512):
-        super(ASFF_3, self).__init__()
+        super().__init__()
 
         self.inter_dim = inter_dim
         compress_c = 8
@@ -160,9 +170,11 @@ class ASFF_3(nn.Module):
         levels_weight = self.weight_levels(levels_weight_v)
         levels_weight = F.softmax(levels_weight, dim=1)
 
-        fused_out_reduced = input1 * levels_weight[:, 0:1, :, :] + \
-                            input2 * levels_weight[:, 1:2, :, :] + \
-                            input3 * levels_weight[:, 2:, :, :]
+        fused_out_reduced = (
+            input1 * levels_weight[:, 0:1, :, :]
+            + input2 * levels_weight[:, 1:2, :, :]
+            + input3 * levels_weight[:, 2:, :, :]
+        )
 
         out = self.conv(fused_out_reduced)
 
@@ -171,7 +183,7 @@ class ASFF_3(nn.Module):
 
 class ASFF_4(nn.Module):
     def __init__(self, inter_dim=512):
-        super(ASFF_4, self).__init__()
+        super().__init__()
 
         self.inter_dim = inter_dim
         compress_c = 8
@@ -195,10 +207,12 @@ class ASFF_4(nn.Module):
         levels_weight = self.weight_levels(levels_weight_v)
         levels_weight = F.softmax(levels_weight, dim=1)
 
-        fused_out_reduced = input0 * levels_weight[:, 0:1, :, :] + \
-                            input1 * levels_weight[:, 1:2, :, :] + \
-                            input2 * levels_weight[:, 2:3, :, :] + \
-                            input3 * levels_weight[:, 3:, :, :]
+        fused_out_reduced = (
+            input0 * levels_weight[:, 0:1, :, :]
+            + input1 * levels_weight[:, 1:2, :, :]
+            + input2 * levels_weight[:, 2:3, :, :]
+            + input3 * levels_weight[:, 3:, :, :]
+        )
 
         out = self.conv(fused_out_reduced)
 
@@ -207,7 +221,7 @@ class ASFF_4(nn.Module):
 
 class BlockBody(nn.Module):
     def __init__(self, channels=[64, 128, 256, 512]):
-        super(BlockBody, self).__init__()
+        super().__init__()
 
         self.blocks_scalezero1 = nn.Sequential(
             BasicConv(channels[0], channels[0], 1),
@@ -336,14 +350,18 @@ class BlockBody(nn.Module):
         x1 = self.blocks_scaleone3(scaleone)
         x2 = self.blocks_scaletwo3(scaletwo)
 
-        scalezero = self.asff_scalezero3(x0, self.upsample_scaleone3_2(x1), self.upsample_scaletwo3_4(x2),
-                                         self.upsample_scalethree3_8(x3))
-        scaleone = self.asff_scaleone3(self.downsample_scalezero3_2(x0), x1, self.upsample_scaletwo3_2(x2),
-                                       self.upsample_scalethree3_4(x3))
-        scaletwo = self.asff_scaletwo3(self.downsample_scalezero3_4(x0), self.downsample_scaleone3_2(x1), x2,
-                                       self.upsample_scalethree3_2(x3))
-        scalethree = self.asff_scalethree3(self.downsample_scalezero3_8(x0), self.downsample_scaleone3_4(x1),
-                                           self.downsample_scaletwo3_2(x2), x3)
+        scalezero = self.asff_scalezero3(
+            x0, self.upsample_scaleone3_2(x1), self.upsample_scaletwo3_4(x2), self.upsample_scalethree3_8(x3)
+        )
+        scaleone = self.asff_scaleone3(
+            self.downsample_scalezero3_2(x0), x1, self.upsample_scaletwo3_2(x2), self.upsample_scalethree3_4(x3)
+        )
+        scaletwo = self.asff_scaletwo3(
+            self.downsample_scalezero3_4(x0), self.downsample_scaleone3_2(x1), x2, self.upsample_scalethree3_2(x3)
+        )
+        scalethree = self.asff_scalethree3(
+            self.downsample_scalezero3_8(x0), self.downsample_scaleone3_4(x1), self.downsample_scaletwo3_2(x2), x3
+        )
 
         scalezero = self.blocks_scalezero4(scalezero)
         scaleone = self.blocks_scaleone4(scaleone)
@@ -354,10 +372,8 @@ class BlockBody(nn.Module):
 
 
 class AFPN(nn.Module):
-    def __init__(self,
-                 in_channels=[256, 512, 1024, 2048],
-                 out_channels=128):
-        super(AFPN, self).__init__()
+    def __init__(self, in_channels=[256, 512, 1024, 2048], out_channels=128):
+        super().__init__()
 
         self.fp16_enabled = False
 
@@ -404,6 +420,7 @@ class AFPN(nn.Module):
 
 class Detect_AFPN4(nn.Module):
     """YOLOv8 Detect head for detection models."""
+
     dynamic = False  # force grid reconstruction
     export = False  # export mode
     shape = None
@@ -420,9 +437,11 @@ class Detect_AFPN4(nn.Module):
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(channel, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch)
+            nn.Sequential(Conv(channel, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
+        )
         self.cv3 = nn.ModuleList(
-            nn.Sequential(Conv(channel, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
+            nn.Sequential(Conv(channel, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch
+        )
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
         self.AFPN = AFPN(ch)
 
@@ -439,14 +458,14 @@ class Detect_AFPN4(nn.Module):
             self.shape = shape
 
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.export and self.format in ('saved_model', 'pb', 'tflite', 'edgetpu', 'tfjs'):  # avoid TF FlexSplitV ops
-            box = x_cat[:, :self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4:]
+        if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            box = x_cat[:, : self.reg_max * 4]
+            cls = x_cat[:, self.reg_max * 4 :]
         else:
             box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = dist2bbox(self.dfl(box), self.anchors.unsqueeze(0), xywh=True, dim=1) * self.strides
 
-        if self.export and self.format in ('tflite', 'edgetpu'):
+        if self.export and self.format in ("tflite", "edgetpu"):
             # Normalize xywh with image size to mitigate quantization error of TFLite integer models as done in YOLOv5:
             # https://github.com/ultralytics/yolov5/blob/0c8de3fca4a702f8ff5c435e67f378d1fce70243/models/tf.py#L307-L309
             # See this PR for details: https://github.com/ultralytics/ultralytics/pull/1695
@@ -465,4 +484,4 @@ class Detect_AFPN4(nn.Module):
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a[-1].bias.data[:] = 1.0  # box
-            b[-1].bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+            b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
