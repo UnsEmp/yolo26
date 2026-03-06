@@ -1,12 +1,13 @@
+import math
+
 import torch
 import torch.nn as nn
-import math
+
 from ultralytics.utils.checks import check_version
 
-__all__ = ['Detect_DySnakeConv', 'Segment_DySnakeConv']
+__all__ = ["Detect_DySnakeConv", "Segment_DySnakeConv"]
 
-TORCH_1_10 = check_version(torch.__version__, '1.10.0')
-
+TORCH_1_10 = check_version(torch.__version__, "1.10.0")
 
 
 def make_anchors(feats, strides, grid_cell_offset=0.5):
@@ -18,7 +19,7 @@ def make_anchors(feats, strides, grid_cell_offset=0.5):
         _, _, h, w = feats[i].shape
         sx = torch.arange(end=w, device=device, dtype=dtype) + grid_cell_offset  # shift x
         sy = torch.arange(end=h, device=device, dtype=dtype) + grid_cell_offset  # shift y
-        sy, sx = torch.meshgrid(sy, sx, indexing='ij') if TORCH_1_10 else torch.meshgrid(sy, sx)
+        sy, sx = torch.meshgrid(sy, sx, indexing="ij") if TORCH_1_10 else torch.meshgrid(sy, sx)
         anchor_points.append(torch.stack((sx, sy), -1).view(-1, 2))
         stride_tensor.append(torch.full((h * w, 1), stride, dtype=dtype, device=device))
     return torch.cat(anchor_points), torch.cat(stride_tensor)
@@ -36,10 +37,8 @@ def dist2bbox(distance, anchor_points, xywh=True, dim=-1):
     return torch.cat((x1y1, x2y2), dim)  # xyxy bbox
 
 
-
 class DFL(nn.Module):
-    """
-    Integral module of Distribution Focal Loss (DFL).
+    """Integral module of Distribution Focal Loss (DFL).
 
     Proposed in Generalized Focal Loss https://ieeexplore.ieee.org/document/9792391
     """
@@ -54,7 +53,7 @@ class DFL(nn.Module):
 
     def forward(self, x):
         """Applies a transformer layer on input tensor 'x' and returns a tensor."""
-        b, c, a = x.shape  # batch, channels, anchors
+        b, _c, a = x.shape  # batch, channels, anchors
         return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
@@ -63,8 +62,7 @@ class Proto(nn.Module):
     """YOLOv8 mask Proto module for segmentation models."""
 
     def __init__(self, c1, c_=256, c2=32):
-        """
-        Initializes the YOLOv8 mask Proto module with specified number of protos and masks.
+        """Initializes the YOLOv8 mask Proto module with specified number of protos and masks.
 
         Input arguments are ch_in, number of protos, number of masks.
         """
@@ -90,6 +88,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -108,7 +107,6 @@ class Conv(nn.Module):
         return self.act(self.conv(x))
 
 
-
 class DSConv(nn.Module):
     def __init__(self, in_ch, out_ch, morph, kernel_size=3, if_offset=True, extend_scope=1):
         """
@@ -119,9 +117,9 @@ class DSConv(nn.Module):
         :param extend_scope: the range to expand (default 1 for this method)
         :param morph: the morphology of the convolution kernel is mainly divided into two types
                         along the x-axis (0) and the y-axis (1) (see the paper for details)
-        :param if_offset: whether deformation is required, if it is False, it is the standard convolution kernel
+        :param if_offset: whether deformation is required, if it is False, it is the standard convolution kernel.
         """
-        super(DSConv, self).__init__()
+        super().__init__()
         # use the <offset_conv> to learn the deformable offset
         self.offset_conv = nn.Conv2d(in_ch, 2 * kernel_size, 3, padding=1)
         self.bn = nn.BatchNorm2d(2 * kernel_size)
@@ -171,7 +169,7 @@ class DSConv(nn.Module):
 
 
 # Core code, for ease of understanding, we mark the dimensions of input and output next to the code
-class DSC(object):
+class DSC:
     def __init__(self, input_shape, kernel_size, extend_scope, morph):
         self.num_points = kernel_size
         self.width = input_shape[2]
@@ -254,23 +252,17 @@ class DSC(object):
                 # This part is quite simple. The main idea is that "offset is an iterative process"
                 y_offset_new[center] = 0
                 for index in range(1, center):
-                    y_offset_new[center + index] = (y_offset_new[center + index - 1] + y_offset[center + index])
-                    y_offset_new[center - index] = (y_offset_new[center - index + 1] + y_offset[center - index])
+                    y_offset_new[center + index] = y_offset_new[center + index - 1] + y_offset[center + index]
+                    y_offset_new[center - index] = y_offset_new[center - index + 1] + y_offset[center - index]
                 y_offset_new = y_offset_new.permute(1, 0, 2, 3).to(device)
                 y_new = y_new.add(y_offset_new.mul(self.extend_scope))
 
-            y_new = y_new.reshape(
-                [self.num_batch, self.num_points, 1, self.width, self.height])
+            y_new = y_new.reshape([self.num_batch, self.num_points, 1, self.width, self.height])
             y_new = y_new.permute(0, 3, 1, 4, 2)
-            y_new = y_new.reshape([
-                self.num_batch, self.num_points * self.width, 1 * self.height
-            ])
-            x_new = x_new.reshape(
-                [self.num_batch, self.num_points, 1, self.width, self.height])
+            y_new = y_new.reshape([self.num_batch, self.num_points * self.width, 1 * self.height])
+            x_new = x_new.reshape([self.num_batch, self.num_points, 1, self.width, self.height])
             x_new = x_new.permute(0, 3, 1, 4, 2)
-            x_new = x_new.reshape([
-                self.num_batch, self.num_points * self.width, 1 * self.height
-            ])
+            x_new = x_new.reshape([self.num_batch, self.num_points * self.width, 1 * self.height])
             return y_new, x_new
 
         else:
@@ -314,23 +306,17 @@ class DSC(object):
                 center = int(self.num_points // 2)
                 x_offset_new[center] = 0
                 for index in range(1, center):
-                    x_offset_new[center + index] = (x_offset_new[center + index - 1] + x_offset[center + index])
-                    x_offset_new[center - index] = (x_offset_new[center - index + 1] + x_offset[center - index])
+                    x_offset_new[center + index] = x_offset_new[center + index - 1] + x_offset[center + index]
+                    x_offset_new[center - index] = x_offset_new[center - index + 1] + x_offset[center - index]
                 x_offset_new = x_offset_new.permute(1, 0, 2, 3).to(device)
                 x_new = x_new.add(x_offset_new.mul(self.extend_scope))
 
-            y_new = y_new.reshape(
-                [self.num_batch, 1, self.num_points, self.width, self.height])
+            y_new = y_new.reshape([self.num_batch, 1, self.num_points, self.width, self.height])
             y_new = y_new.permute(0, 3, 1, 4, 2)
-            y_new = y_new.reshape([
-                self.num_batch, 1 * self.width, self.num_points * self.height
-            ])
-            x_new = x_new.reshape(
-                [self.num_batch, 1, self.num_points, self.width, self.height])
+            y_new = y_new.reshape([self.num_batch, 1 * self.width, self.num_points * self.height])
+            x_new = x_new.reshape([self.num_batch, 1, self.num_points, self.width, self.height])
             x_new = x_new.permute(0, 3, 1, 4, 2)
-            x_new = x_new.reshape([
-                self.num_batch, 1 * self.width, self.num_points * self.height
-            ])
+            x_new = x_new.reshape([self.num_batch, 1 * self.width, self.num_points * self.height])
             return y_new, x_new
 
     """
@@ -360,8 +346,7 @@ class DSC(object):
         x1 = torch.clamp(x1, zero, max_x)
 
         input_feature_flat = input_feature.flatten()
-        input_feature_flat = input_feature_flat.reshape(
-            self.num_batch, self.num_channels, self.width, self.height)
+        input_feature_flat = input_feature_flat.reshape(self.num_batch, self.num_channels, self.width, self.height)
         input_feature_flat = input_feature_flat.permute(0, 2, 3, 1)
         input_feature_flat = input_feature_flat.reshape(-1, self.num_channels)
         dimension = self.height * self.width
@@ -369,8 +354,7 @@ class DSC(object):
         base = torch.arange(self.num_batch) * dimension
         base = base.reshape([-1, 1]).float()
 
-        repeat = torch.ones([self.num_points * self.width * self.height
-                             ]).unsqueeze(0)
+        repeat = torch.ones([self.num_points * self.width * self.height]).unsqueeze(0)
         repeat = repeat.float()
 
         base = torch.matmul(base, repeat)
@@ -417,24 +401,27 @@ class DSC(object):
         vol_a1 = ((y - y0_float) * (x1_float - x)).unsqueeze(-1).to(device)
         vol_c1 = ((y - y0_float) * (x - x0_float)).unsqueeze(-1).to(device)
 
-        outputs = (value_a0 * vol_a0 + value_c0 * vol_c0 + value_a1 * vol_a1 +
-                   value_c1 * vol_c1)
+        outputs = value_a0 * vol_a0 + value_c0 * vol_c0 + value_a1 * vol_a1 + value_c1 * vol_c1
 
         if self.morph == 0:
-            outputs = outputs.reshape([
-                self.num_batch,
-                self.num_points * self.width,
-                1 * self.height,
-                self.num_channels,
-            ])
+            outputs = outputs.reshape(
+                [
+                    self.num_batch,
+                    self.num_points * self.width,
+                    1 * self.height,
+                    self.num_channels,
+                ]
+            )
             outputs = outputs.permute(0, 3, 1, 2)
         else:
-            outputs = outputs.reshape([
-                self.num_batch,
-                1 * self.width,
-                self.num_points * self.height,
-                self.num_channels,
-            ])
+            outputs = outputs.reshape(
+                [
+                    self.num_batch,
+                    1 * self.width,
+                    self.num_points * self.height,
+                    self.num_channels,
+                ]
+            )
             outputs = outputs.permute(0, 3, 1, 2)
         return outputs
 
@@ -444,9 +431,9 @@ class DSC(object):
         return deformed_feature
 
 
-
 class Detect_DySnakeConv(nn.Module):
     """YOLOv8 Detect Efficient head for detection models."""
+
     dynamic = False  # force grid reconstruction
     export = False  # export mode
     shape = None
@@ -460,7 +447,7 @@ class Detect_DySnakeConv(nn.Module):
         self.reg_max = 16  # DFL channels (ch[0] // 16 to scale 4/8/12/16/20 for n/s/m/l/x)
         self.no = nc + self.reg_max * 4  # number of outputs per anchor
         self.stride = torch.zeros(self.nl)  # strides computed during build
-        self.DySnakeConv = nn.ModuleList(nn.Sequential(DSConv(x, x, 0), DSConv(x, x, 0)) for x in ch) # DySnakeConv
+        self.DySnakeConv = nn.ModuleList(nn.Sequential(DSConv(x, x, 0), DSConv(x, x, 0)) for x in ch)  # DySnakeConv
         self.cv2 = nn.ModuleList(nn.Conv2d(x, 4 * self.reg_max, 1) for x in ch)
         self.cv3 = nn.ModuleList(nn.Conv2d(x, self.nc, 1) for x in ch)
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
@@ -478,9 +465,9 @@ class Detect_DySnakeConv(nn.Module):
             self.shape = shape
 
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.export and self.format in ('saved_model', 'pb', 'tflite', 'edgetpu', 'tfjs'):  # avoid TF FlexSplitV ops
-            box = x_cat[:, :self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4:]
+        if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            box = x_cat[:, : self.reg_max * 4]
+            cls = x_cat[:, self.reg_max * 4 :]
         else:
             box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = dist2bbox(self.dfl(box), self.anchors.unsqueeze(0), xywh=True, dim=1) * self.strides
@@ -494,8 +481,7 @@ class Detect_DySnakeConv(nn.Module):
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a.bias.data[:] = 1.0  # box
-            b.bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
-
+            b.bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
 
 class Segment_DySnakeConv(Detect_DySnakeConv):
@@ -522,6 +508,3 @@ class Segment_DySnakeConv(Detect_DySnakeConv):
         if self.training:
             return x, mc, p
         return (torch.cat([x, mc], 1), p) if self.export else (torch.cat([x[0], mc], 1), (x[1], mc, p))
-
-
-

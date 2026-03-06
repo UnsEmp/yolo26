@@ -1,7 +1,8 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 
-__all__ = ['Bi_FPN']
+__all__ = ["Bi_FPN"]
+
 
 class swish(nn.Module):
     def forward(self, x):
