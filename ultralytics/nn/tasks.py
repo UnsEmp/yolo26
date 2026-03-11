@@ -12,34 +12,21 @@ import torch.nn as nn
 
 from ultralytics.nn.autobackend import check_class_names
 from ultralytics.nn.modules import (
-    ECA,
-    CBAM,
-    MSAC2PSA,
-    A2C2fStar,
-    A2C2fStarFast,
-    C3k2Star,
-    SDA2C2f,
-    SGhostConv,
-    SSGhostConv,
-    SPDSGhost,
-    EMA,
-    C3GhostStar,
-    C2PSA_ECA,
-    GAM,
-    C2f_DLKA,
-    C2f_CGA,
-    DAttentionBaseline,
-    C2f_FLA,
-    HAT,
-    LSKA,
-    C2f_TripletAt,
     AIFI,
     C1,
     C2,
     C2PSA,
+    C2PSA_ECA,
     C3,
     C3TR,
+    CBAM,
+    ECA,
     ELAN1,
+    EMA,
+    GAM,
+    HAT,
+    LSKA,
+    MSAC2PSA,
     OBB,
     OBB26,
     PSA,
@@ -47,16 +34,24 @@ from ultralytics.nn.modules import (
     SPPELAN,
     SPPF,
     A2C2f,
+    A2C2fStar,
+    A2C2fStarFast,
     AConv,
     ADown,
     Bottleneck,
     BottleneckCSP,
     C2f,
+    C2f_CGA,
+    C2f_DLKA,
+    C2f_FLA,
+    C2f_TripletAt,
     C2fAttn,
     C2fCIB,
     C2fPSA,
     C3Ghost,
+    C3GhostStar,
     C3k2,
+    C3k2Star,
     C3x,
     CBFuse,
     CBLinear,
@@ -65,6 +60,7 @@ from ultralytics.nn.modules import (
     Conv,
     Conv2,
     ConvTranspose,
+    DAttentionBaseline,
     Detect,
     DWConv,
     DWConvTranspose2d,
@@ -85,8 +81,12 @@ from ultralytics.nn.modules import (
     ResNetLayer,
     RTDETRDecoder,
     SCDown,
+    SDA2C2f,
     Segment,
     Segment26,
+    SGhostConv,
+    SPDSGhost,
+    SSGhostConv,
     TorchVision,
     WorldDetect,
     YOLOEDetect,
@@ -1545,10 +1545,11 @@ def parse_model(d, ch, verbose=True):
     """
     # python的抽象语法树模块，用于动态解析和执行python表达式
     import ast
+
     # print(d, ch, verbose)
     # Args
     legacy = True  # backward compatibility for v3/v5/v8/v9 models
-    max_channels = float("inf") # maximum number of channels
+    max_channels = float("inf")  # maximum number of channels
     nc, act, scales, end2end = (d.get(x) for x in ("nc", "activation", "scales", "end2end"))
     reg_max = d.get("reg_max", 16)
     depth, width, kpt_shape = (d.get(x, 1.0) for x in ("depth_multiple", "width_multiple", "kpt_shape"))
@@ -1559,11 +1560,11 @@ def parse_model(d, ch, verbose=True):
             LOGGER.warning(f"no model scale passed. Assuming scale='{scale}'.")
         depth, width, max_channels = scales[scale]
 
-    '''
+    """
         使用eval函数执行act字符串中的python表达式。动态地评估act中的内容并返回其结果。
         例如，如果act是"torch.nn.SiLU()"，eval函数会执行这个表达式并返回一个SiLU激活函数的实例。
         然后这个结果被赋值给Conv.default_act，重新定义了Conv类的默认激活函数。
-    '''
+    """
     if act:
         Conv.default_act = eval(act)  # redefine default activation, i.e. Conv.default_act = torch.nn.SiLU()
         if verbose:
@@ -1633,7 +1634,7 @@ def parse_model(d, ch, verbose=True):
             C2f_FLA,
             HAT,
             LSKA,
-            C2f_TripletAt
+            C2f_TripletAt,
         }
     )
     repeat_modules = frozenset(  # modules with 'repeat' arguments
@@ -1662,7 +1663,7 @@ def parse_model(d, ch, verbose=True):
             SPDSGhost,
             C3GhostStar,
             C2PSA_ECA,
-            CBAM
+            CBAM,
         }
     )
     for i, (f, n, m, args) in enumerate(d["backbone"] + d["head"]):  # from, number, module, args
@@ -1673,25 +1674,23 @@ def parse_model(d, ch, verbose=True):
             if "torchvision.ops." in m
             else globals()[m]
         )  # get module
-        #解析模块参数，尝试将字符串参数转换为对应的变量或字面值
+        # 解析模块参数，尝试将字符串参数转换为对应的变量或字面值
         for j, a in enumerate(args):
-            if isinstance(a, str): # 检查当前参数a是否是字符串类型
+            if isinstance(a, str):  # 检查当前参数a是否是字符串类型
                 with contextlib.suppress(ValueError):
                     args[j] = locals()[a] if a in locals() else ast.literal_eval(a)
         # if m is CBAM:
         #     print("start n", n)
         n = n_ = max(round(n * depth), 1) if n > 1 else n  # depth gain
 
-
-
         if m in base_modules:
-            '''
+            """
             parse_model 的 Docstring
             如果在，从ch列表中取出索引为f的元素并赋值给c1
             f是从模型配置中取得的，代表了当前层的输入来源。
             同时，他取出args的第一个元素并赋值给c2.
-            '''
-            
+            """
+
             c1, c2 = ch[f], args[0]
             # if m is C2PSA_ECA:
             #     print("c1 c2 : ",c1, c2)
@@ -1740,7 +1739,7 @@ def parse_model(d, ch, verbose=True):
                 args = [ch[f]]
             if m is C2f_TripletAt:
                 args = [ch[f], args[0]]
-            
+
             # if m is C2PSA:
             #     print("C2PSA : ", args)
             # if m is C2PSA_ECA:

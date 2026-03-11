@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['SPPELAN']
+__all__ = ["SPPELAN"]
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -32,7 +32,7 @@ class Conv(nn.Module):
 
 class SP(nn.Module):
     def __init__(self, k=3, s=1):
-        super(SP, self).__init__()
+        super().__init__()
         self.m = nn.MaxPool2d(kernel_size=k, stride=s, padding=k // 2)
 
     def forward(self, x):
