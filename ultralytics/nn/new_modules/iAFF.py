@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['C2f_iAFF']
+__all__ = ["C2f_iAFF"]
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -14,6 +15,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -33,12 +35,10 @@ class Conv(nn.Module):
 
 
 class iAFF(nn.Module):
-    '''
-    多特征融合 iAFF
-    '''
+    """多特征融合 iAFF."""
 
     def __init__(self, channels=64, r=2):
-        super(iAFF, self).__init__()
+        super().__init__()
         inter_channels = int(channels // r)
 
         # 本地注意力
@@ -95,12 +95,10 @@ class iAFF(nn.Module):
 
 
 class AFF(nn.Module):
-    '''
-    多特征融合 AFF
-    '''
+    """多特征融合 AFF."""
 
     def __init__(self, channels=64, r=4):
-        super(AFF, self).__init__()
+        super().__init__()
         inter_channels = int(channels // r)
 
         self.local_att = nn.Sequential(
@@ -182,7 +180,7 @@ class Bottleneck(nn.Module):
         return results
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     x = torch.ones(8, 64, 32, 32)
     channels = x.shape[1]
     model = C2f_iAFF(channels, channels, True)
