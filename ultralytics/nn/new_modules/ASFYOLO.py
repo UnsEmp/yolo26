@@ -1,9 +1,11 @@
+import math
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-import math
 
-__all__ = ['Zoom_cat', 'ScalSeq', 'Add', 'channel_att', 'attention_model']
+__all__ = ["Add", "ScalSeq", "Zoom_cat", "attention_model", "channel_att"]
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     # Pad to 'same' shape outputs
@@ -37,14 +39,14 @@ class Zoom_cat(nn.Module):
         # self.conv_l_post_down = Conv(in_dim, 2*in_dim, 3, 1, 1)
 
     def forward(self, x):
-        """l,m,s表示大中小三个尺度，最终会被整合到m这个尺度上"""
+        """L,m,s表示大中小三个尺度，最终会被整合到m这个尺度上."""
         l, m, s = x[0], x[1], x[2]
         tgt_size = m.shape[2:]
         l = F.adaptive_max_pool2d(l, tgt_size) + F.adaptive_avg_pool2d(l, tgt_size)
         # l = self.conv_l_post_down(l)
         # m = self.conv_m(m)
         # s = self.conv_s_pre_up(s)
-        s = F.interpolate(s, m.shape[2:], mode='nearest')
+        s = F.interpolate(s, m.shape[2:], mode="nearest")
         # s = self.conv_s_post_up(s)
         lms = torch.cat([l, m, s], dim=1)
         return lms
@@ -52,7 +54,7 @@ class Zoom_cat(nn.Module):
 
 class ScalSeq(nn.Module):
     def __init__(self, inc, channel):
-        super(ScalSeq, self).__init__()
+        super().__init__()
         self.conv0 = Conv(inc[0], channel, 1)
         self.conv1 = Conv(inc[1], channel, 1)
         self.conv2 = Conv(inc[2], channel, 1)
@@ -65,9 +67,9 @@ class ScalSeq(nn.Module):
         p3, p4, p5 = x[0], x[1], x[2]
         p3 = self.conv0(p3)
         p4_2 = self.conv1(p4)
-        p4_2 = F.interpolate(p4_2, p3.size()[2:], mode='nearest')
+        p4_2 = F.interpolate(p4_2, p3.size()[2:], mode="nearest")
         p5_2 = self.conv2(p5)
-        p5_2 = F.interpolate(p5_2, p3.size()[2:], mode='nearest')
+        p5_2 = F.interpolate(p5_2, p3.size()[2:], mode="nearest")
         p3_3d = torch.unsqueeze(p3, -3)
         p4_3d = torch.unsqueeze(p4_2, -3)
         p5_3d = torch.unsqueeze(p5_2, -3)
@@ -93,7 +95,7 @@ class Add(nn.Module):
 
 class channel_att(nn.Module):
     def __init__(self, channel, b=1, gamma=2):
-        super(channel_att, self).__init__()
+        super().__init__()
         kernel_size = int(abs((math.log(channel, 2) + b) / gamma))
         kernel_size = kernel_size if kernel_size % 2 else kernel_size + 1
 
@@ -112,18 +114,21 @@ class channel_att(nn.Module):
 
 class local_att(nn.Module):
     def __init__(self, channel, reduction=16):
-        super(local_att, self).__init__()
+        super().__init__()
 
-        self.conv_1x1 = nn.Conv2d(in_channels=channel, out_channels=channel // reduction, kernel_size=1, stride=1,
-                                  bias=False)
+        self.conv_1x1 = nn.Conv2d(
+            in_channels=channel, out_channels=channel // reduction, kernel_size=1, stride=1, bias=False
+        )
 
         self.relu = nn.ReLU()
         self.bn = nn.BatchNorm2d(channel // reduction)
 
-        self.F_h = nn.Conv2d(in_channels=channel // reduction, out_channels=channel, kernel_size=1, stride=1,
-                             bias=False)
-        self.F_w = nn.Conv2d(in_channels=channel // reduction, out_channels=channel, kernel_size=1, stride=1,
-                             bias=False)
+        self.F_h = nn.Conv2d(
+            in_channels=channel // reduction, out_channels=channel, kernel_size=1, stride=1, bias=False
+        )
+        self.F_w = nn.Conv2d(
+            in_channels=channel // reduction, out_channels=channel, kernel_size=1, stride=1, bias=False
+        )
 
         self.sigmoid_h = nn.Sigmoid()
         self.sigmoid_w = nn.Sigmoid()

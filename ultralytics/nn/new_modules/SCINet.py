@@ -1,12 +1,12 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['SCINet']
+__all__ = ["SCINet"]
 
 
 class SCINet(nn.Module):
     def __init__(self, channels=3, layers=3):
-        super(SCINet, self).__init__()
+        super().__init__()
 
         kernel_size = 3
         dilation = 1
@@ -14,13 +14,13 @@ class SCINet(nn.Module):
 
         self.in_conv = nn.Sequential(
             nn.Conv2d(in_channels=3, out_channels=channels, kernel_size=kernel_size, stride=1, padding=padding),
-            nn.ReLU()
+            nn.ReLU(),
         )
 
         self.conv = nn.Sequential(
             nn.Conv2d(in_channels=channels, out_channels=channels, kernel_size=kernel_size, stride=1, padding=padding),
             nn.BatchNorm2d(channels),
-            nn.ReLU()
+            nn.ReLU(),
         )
 
         self.blocks = nn.ModuleList()
@@ -28,8 +28,7 @@ class SCINet(nn.Module):
             self.blocks.append(self.conv)
 
         self.out_conv = nn.Sequential(
-            nn.Conv2d(in_channels=channels, out_channels=3, kernel_size=3, stride=1, padding=1),
-            nn.Sigmoid()
+            nn.Conv2d(in_channels=channels, out_channels=3, kernel_size=3, stride=1, padding=1), nn.Sigmoid()
         )
 
     def forward(self, input):
@@ -42,7 +41,6 @@ class SCINet(nn.Module):
         illu = torch.clamp(illu, 0.0001, 1)
 
         return illu
-
 
 
 if __name__ == "__main__":
