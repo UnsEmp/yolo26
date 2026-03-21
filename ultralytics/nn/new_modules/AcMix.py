@@ -1,7 +1,8 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['C2f_ACmix', 'ACmix']
+__all__ = ["ACmix", "C2f_ACmix"]
+
 
 def position(H, W, type, is_cuda=True):
     if is_cuda:
@@ -15,7 +16,7 @@ def position(H, W, type, is_cuda=True):
 
 
 def stride(x, stride):
-    b, c, h, w = x.shape
+    _b, _c, _h, _w = x.shape
     return x[:, :, ::stride, ::stride]
 
 
@@ -26,12 +27,12 @@ def init_rate_half(tensor):
 
 def init_rate_0(tensor):
     if tensor is not None:
-        tensor.data.fill_(0.)
+        tensor.data.fill_(0.0)
 
 
 class ACmix(nn.Module):
     def __init__(self, in_planes, kernel_att=7, head=4, kernel_conv=3, stride=1, dilation=1):
-        super(ACmix, self).__init__()
+        super().__init__()
         out_planes = in_planes
         self.in_planes = in_planes
         self.out_planes = out_planes
@@ -55,9 +56,15 @@ class ACmix(nn.Module):
         self.softmax = torch.nn.Softmax(dim=1)
 
         self.fc = nn.Conv2d(3 * self.head, self.kernel_conv * self.kernel_conv, kernel_size=1, bias=False)
-        self.dep_conv = nn.Conv2d(self.kernel_conv * self.kernel_conv * self.head_dim, out_planes,
-                                  kernel_size=self.kernel_conv, bias=True, groups=self.head_dim, padding=1,
-                                  stride=stride)
+        self.dep_conv = nn.Conv2d(
+            self.kernel_conv * self.kernel_conv * self.head_dim,
+            out_planes,
+            kernel_size=self.kernel_conv,
+            bias=True,
+            groups=self.head_dim,
+            padding=1,
+            stride=stride,
+        )
 
         self.reset_parameters()
 
@@ -66,7 +73,7 @@ class ACmix(nn.Module):
         init_rate_half(self.rate2)
         kernel = torch.zeros(self.kernel_conv * self.kernel_conv, self.kernel_conv, self.kernel_conv)
         for i in range(self.kernel_conv * self.kernel_conv):
-            kernel[i, i // self.kernel_conv, i % self.kernel_conv] = 1.
+            kernel[i, i // self.kernel_conv, i % self.kernel_conv] = 1.0
         kernel = kernel.squeeze(0).repeat(self.out_planes, 1, 1, 1)
         self.dep_conv.weight = nn.Parameter(data=kernel, requires_grad=True)
         self.dep_conv.bias = init_rate_0(self.dep_conv.bias)
@@ -74,7 +81,7 @@ class ACmix(nn.Module):
     def forward(self, x):
         q, k, v = self.conv1(x), self.conv2(x), self.conv3(x)
         scaling = float(self.head_dim) ** -0.5
-        b, c, h, w = q.shape
+        b, _c, h, w = q.shape
         h_out, w_out = h // self.stride, w // self.stride
 
         # ### att
@@ -91,29 +98,40 @@ class ACmix(nn.Module):
         else:
             q_pe = pe
 
-        unfold_k = self.unfold(self.pad_att(k_att)).view(b * self.head, self.head_dim,
-                                                         self.kernel_att * self.kernel_att, h_out,
-                                                         w_out)  # b*head, head_dim, k_att^2, h_out, w_out
-        unfold_rpe = self.unfold(self.pad_att(pe)).view(1, self.head_dim, self.kernel_att * self.kernel_att, h_out,
-                                                        w_out)  # 1, head_dim, k_att^2, h_out, w_out
+        unfold_k = self.unfold(self.pad_att(k_att)).view(
+            b * self.head, self.head_dim, self.kernel_att * self.kernel_att, h_out, w_out
+        )  # b*head, head_dim, k_att^2, h_out, w_out
+        unfold_rpe = self.unfold(self.pad_att(pe)).view(
+            1, self.head_dim, self.kernel_att * self.kernel_att, h_out, w_out
+        )  # 1, head_dim, k_att^2, h_out, w_out
 
         att = (q_att.unsqueeze(2) * (unfold_k + q_pe.unsqueeze(2) - unfold_rpe)).sum(
-            1)  # (b*head, head_dim, 1, h_out, w_out) * (b*head, head_dim, k_att^2, h_out, w_out) -> (b*head, k_att^2, h_out, w_out)
+            1
+        )  # (b*head, head_dim, 1, h_out, w_out) * (b*head, head_dim, k_att^2, h_out, w_out) -> (b*head, k_att^2, h_out, w_out)
         att = self.softmax(att)
 
-        out_att = self.unfold(self.pad_att(v_att)).view(b * self.head, self.head_dim, self.kernel_att * self.kernel_att,
-                                                        h_out, w_out)
+        out_att = self.unfold(self.pad_att(v_att)).view(
+            b * self.head, self.head_dim, self.kernel_att * self.kernel_att, h_out, w_out
+        )
         out_att = (att.unsqueeze(1) * out_att).sum(2).view(b, self.out_planes, h_out, w_out)
 
         ## conv
-        f_all = self.fc(torch.cat(
-            [q.view(b, self.head, self.head_dim, h * w), k.view(b, self.head, self.head_dim, h * w),
-             v.view(b, self.head, self.head_dim, h * w)], 1))
+        f_all = self.fc(
+            torch.cat(
+                [
+                    q.view(b, self.head, self.head_dim, h * w),
+                    k.view(b, self.head, self.head_dim, h * w),
+                    v.view(b, self.head, self.head_dim, h * w),
+                ],
+                1,
+            )
+        )
         f_conv = f_all.permute(0, 2, 1, 3).reshape(x.shape[0], -1, x.shape[-2], x.shape[-1])
 
         out_conv = self.dep_conv(f_conv)
 
         return self.rate1 * out_att + self.rate2 * out_conv
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -126,6 +144,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
