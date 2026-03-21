@@ -1,12 +1,24 @@
-import torch
-from torch import nn
-import torch.nn.functional as F
 import numpy as np
+import torch
+import torch.nn.functional as F
+from torch import nn
+
 try:
     from mmcv.cnn import ConvModule, build_norm_layer
 except:
     pass
-__all__ = ['Low_FAM', 'Low_IFM', 'Split', 'SimConv', 'Low_LAF', 'Inject', 'RepBlock', 'High_FAM', 'High_IFM', 'High_LAF']
+__all__ = [
+    "High_FAM",
+    "High_IFM",
+    "High_LAF",
+    "Inject",
+    "Low_FAM",
+    "Low_IFM",
+    "Low_LAF",
+    "RepBlock",
+    "SimConv",
+    "Split",
+]
 
 
 class High_LAF(nn.Module):
@@ -16,7 +28,7 @@ class High_LAF(nn.Module):
         else:
             self.pool = nn.functional.adaptive_avg_pool2d
 
-        N, C, H, W = x2.shape
+        _N, _C, H, W = x2.shape
         # output_size = np.array([H, W])
         output_size = [H, W]
         x1 = self.pool(x1, output_size)
@@ -25,20 +37,38 @@ class High_LAF(nn.Module):
 
 
 class High_IFM(nn.Module):
-    def __init__(self, block_num, embedding_dim, key_dim, num_heads,
-                 mlp_ratio=4., attn_ratio=2., drop=0., attn_drop=0., drop_path=0.,
-                 norm_cfg=dict(type='BN', requires_grad=True),
-                 act_layer=nn.ReLU6):
+    def __init__(
+        self,
+        block_num,
+        embedding_dim,
+        key_dim,
+        num_heads,
+        mlp_ratio=4.0,
+        attn_ratio=2.0,
+        drop=0.0,
+        attn_drop=0.0,
+        drop_path=0.0,
+        norm_cfg=dict(type="BN", requires_grad=True),
+        act_layer=nn.ReLU6,
+    ):
         super().__init__()
         self.block_num = block_num
         drop_path = [x.item() for x in torch.linspace(0, drop_path[0], drop_path[1])]  # 0.1, 2
         self.transformer_blocks = nn.ModuleList()
         for i in range(self.block_num):
-            self.transformer_blocks.append(top_Block(
-                embedding_dim, key_dim=key_dim, num_heads=num_heads,
-                mlp_ratio=mlp_ratio, attn_ratio=attn_ratio,
-                drop=drop, drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
-                norm_cfg=norm_cfg, act_layer=act_layer))
+            self.transformer_blocks.append(
+                top_Block(
+                    embedding_dim,
+                    key_dim=key_dim,
+                    num_heads=num_heads,
+                    mlp_ratio=mlp_ratio,
+                    attn_ratio=attn_ratio,
+                    drop=drop,
+                    drop_path=drop_path[i] if isinstance(drop_path, list) else drop_path,
+                    norm_cfg=norm_cfg,
+                    act_layer=act_layer,
+                )
+            )
 
     def forward(self, x):
         # token * N
@@ -48,8 +78,15 @@ class High_IFM(nn.Module):
 
 
 class Mlp(nn.Module):
-    def __init__(self, in_features, hidden_features=None, out_features=None, act_layer=nn.ReLU, drop=0.,
-                 norm_cfg=dict(type='BN', requires_grad=True)):
+    def __init__(
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        act_layer=nn.ReLU,
+        drop=0.0,
+        norm_cfg=dict(type="BN", requires_grad=True),
+    ):
         super().__init__()
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
@@ -70,22 +107,33 @@ class Mlp(nn.Module):
 
 
 class top_Block(nn.Module):
-
-    def __init__(self, dim, key_dim, num_heads, mlp_ratio=4., attn_ratio=2., drop=0.,
-                 drop_path=0., act_layer=nn.ReLU, norm_cfg=dict(type='BN2d', requires_grad=True)):
+    def __init__(
+        self,
+        dim,
+        key_dim,
+        num_heads,
+        mlp_ratio=4.0,
+        attn_ratio=2.0,
+        drop=0.0,
+        drop_path=0.0,
+        act_layer=nn.ReLU,
+        norm_cfg=dict(type="BN2d", requires_grad=True),
+    ):
         super().__init__()
         self.dim = dim
         self.num_heads = num_heads
         self.mlp_ratio = mlp_ratio
 
-        self.attn = Attention(dim, key_dim=key_dim, num_heads=num_heads, attn_ratio=attn_ratio, activation=act_layer,
-                              norm_cfg=norm_cfg)
+        self.attn = Attention(
+            dim, key_dim=key_dim, num_heads=num_heads, attn_ratio=attn_ratio, activation=act_layer, norm_cfg=norm_cfg
+        )
 
         # NOTE: drop path for stochastic depth, we shall see if this is better than dropout here
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
         mlp_hidden_dim = int(dim * mlp_ratio)
-        self.mlp = Mlp(in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop,
-                       norm_cfg=norm_cfg)
+        self.mlp = Mlp(
+            in_features=dim, hidden_features=mlp_hidden_dim, act_layer=act_layer, drop=drop, norm_cfg=norm_cfg
+        )
 
     def forward(self, x1):
         x1 = x1 + self.drop_path(self.attn(x1))
@@ -93,15 +141,15 @@ class top_Block(nn.Module):
         return x1
 
 
-def drop_path(x, drop_prob: float = 0., training: bool = False):
-    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks).
-    This is the same as the DropConnect impl I created for EfficientNet, etc networks, however,
-    the original name is misleading as 'Drop Connect' is a different form of dropout in a separate paper...
-    See discussion: https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for
-    changing the layer and argument names to 'drop path' rather than mix DropConnect as a layer name and use
-    'survival rate' as the argument.
+def drop_path(x, drop_prob: float = 0.0, training: bool = False):
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks). This is the same as the
+    DropConnect impl I created for EfficientNet, etc networks, however, the original name is misleading as 'Drop
+    Connect' is a different form of dropout in a separate paper... See discussion:
+    https://github.com/tensorflow/tpu/issues/494#issuecomment-532968956 ... I've opted for changing the layer and
+    argument names to 'drop path' rather than mix DropConnect as a layer name and use 'survival rate' as
+    the argument.
     """
-    if drop_prob == 0. or not training:
+    if drop_prob == 0.0 or not training:
         return x
     keep_prob = 1 - drop_prob
     shape = (x.shape[0],) + (1,) * (x.ndim - 1)  # work with diff dim tensors, not just 2D ConvNets
@@ -112,11 +160,10 @@ def drop_path(x, drop_prob: float = 0., training: bool = False):
 
 
 class DropPath(nn.Module):
-    """Drop paths (Stochastic Depth) per sample  (when applied in main path of residual blocks).
-    """
+    """Drop paths (Stochastic Depth) per sample (when applied in main path of residual blocks)."""
 
     def __init__(self, drop_prob=None):
-        super(DropPath, self).__init__()
+        super().__init__()
         self.drop_prob = drop_prob
 
     def forward(self, x):
@@ -124,13 +171,18 @@ class DropPath(nn.Module):
 
 
 class Attention(torch.nn.Module):
-    def __init__(self, dim, key_dim, num_heads,
-                 attn_ratio=4,
-                 activation=None,
-                 norm_cfg=dict(type='BN', requires_grad=True), ):
+    def __init__(
+        self,
+        dim,
+        key_dim,
+        num_heads,
+        attn_ratio=4,
+        activation=None,
+        norm_cfg=dict(type="BN", requires_grad=True),
+    ):
         super().__init__()
         self.num_heads = num_heads
-        self.scale = key_dim ** -0.5
+        self.scale = key_dim**-0.5
         self.key_dim = key_dim
         self.nh_kd = nh_kd = key_dim * num_heads  # num_head key_dim
         self.d = int(attn_ratio * key_dim)
@@ -141,11 +193,10 @@ class Attention(torch.nn.Module):
         self.to_k = Conv2d_BN(dim, nh_kd, 1, norm_cfg=norm_cfg)
         self.to_v = Conv2d_BN(dim, self.dh, 1, norm_cfg=norm_cfg)
 
-        self.proj = torch.nn.Sequential(activation(), Conv2d_BN(
-            self.dh, dim, bn_weight_init=0, norm_cfg=norm_cfg))
+        self.proj = torch.nn.Sequential(activation(), Conv2d_BN(self.dh, dim, bn_weight_init=0, norm_cfg=norm_cfg))
 
     def forward(self, x):  # x (B,N,C)
-        B, C, H, W = get_shape(x)
+        B, _C, H, W = get_shape(x)
 
         qq = self.to_q(x).reshape(B, self.num_heads, self.key_dim, H * W).permute(0, 1, 3, 2)
         kk = self.to_k(x).reshape(B, self.num_heads, self.key_dim, H * W)
@@ -169,9 +220,18 @@ def get_shape(tensor):
 
 
 class Conv2d_BN(nn.Sequential):
-    def __init__(self, a, b, ks=1, stride=1, pad=0, dilation=1,
-                 groups=1, bn_weight_init=1,
-                 norm_cfg=dict(type='BN', requires_grad=True)):
+    def __init__(
+        self,
+        a,
+        b,
+        ks=1,
+        stride=1,
+        pad=0,
+        dilation=1,
+        groups=1,
+        bn_weight_init=1,
+        norm_cfg=dict(type="BN", requires_grad=True),
+    ):
         super().__init__()
         self.inp_channel = a
         self.out_channel = b
@@ -181,32 +241,31 @@ class Conv2d_BN(nn.Sequential):
         self.dilation = dilation
         self.groups = groups
 
-        self.add_module('c', nn.Conv2d(
-            a, b, ks, stride, pad, dilation, groups, bias=False))
+        self.add_module("c", nn.Conv2d(a, b, ks, stride, pad, dilation, groups, bias=False))
         bn = build_norm_layer(norm_cfg, b)[1]
         nn.init.constant_(bn.weight, bn_weight_init)
         nn.init.constant_(bn.bias, 0)
-        self.add_module('bn', bn)
+        self.add_module("bn", bn)
 
 
 class High_FAM(nn.Module):
-    def __init__(self, stride, pool_mode='onnx'):
+    def __init__(self, stride, pool_mode="onnx"):
         super().__init__()
         self.stride = stride
-        if pool_mode == 'torch':
+        if pool_mode == "torch":
             self.pool = nn.functional.adaptive_avg_pool2d
-        elif pool_mode == 'onnx':
+        elif pool_mode == "onnx":
             self.pool = onnx_AdaptiveAvgPool2d
 
     def forward(self, inputs):
-        B, C, H, W = get_shape(inputs[-1])
+        _B, _C, H, W = get_shape(inputs[-1])
         H = (H - 1) // self.stride + 1
         W = (W - 1) // self.stride + 1
 
         # output_size = np.array([H, W])
         output_size = [H, W]
 
-        if not hasattr(self, 'pool'):
+        if not hasattr(self, "pool"):
             self.pool = nn.functional.adaptive_avg_pool2d
 
         if torch.onnx.is_in_onnx_export():
@@ -218,13 +277,24 @@ class High_FAM(nn.Module):
 
 
 class RepVGGBlock(nn.Module):
-    '''RepVGGBlock is a basic rep-style block, including training and deploy status
-    This code is based on https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py
-    '''
+    """RepVGGBlock is a basic rep-style block, including training and deploy status This code is based on
+    https://github.com/DingXiaoH/RepVGG/blob/main/repvgg.py.
+    """
 
-    def __init__(self, in_channels, out_channels, kernel_size=3,
-                 stride=1, padding=1, dilation=1, groups=1, padding_mode='zeros', deploy=False, use_se=False):
-        super(RepVGGBlock, self).__init__()
+    def __init__(
+        self,
+        in_channels,
+        out_channels,
+        kernel_size=3,
+        stride=1,
+        padding=1,
+        dilation=1,
+        groups=1,
+        padding_mode="zeros",
+        deploy=False,
+        use_se=False,
+    ):
+        super().__init__()
         """ Initialization of the class.
         Args:
             in_channels (int): Number of channels in the input image
@@ -258,22 +328,42 @@ class RepVGGBlock(nn.Module):
             self.se = nn.Identity()
 
         if deploy:
-            self.rbr_reparam = nn.Conv2d(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                         stride=stride,
-                                         padding=padding, dilation=dilation, groups=groups, bias=True,
-                                         padding_mode=padding_mode)
+            self.rbr_reparam = nn.Conv2d(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                dilation=dilation,
+                groups=groups,
+                bias=True,
+                padding_mode=padding_mode,
+            )
 
         else:
-            self.rbr_identity = nn.BatchNorm2d(
-                num_features=in_channels) if out_channels == in_channels and stride == 1 else None
-            self.rbr_dense = conv_bn(in_channels=in_channels, out_channels=out_channels, kernel_size=kernel_size,
-                                     stride=stride, padding=padding, groups=groups)
-            self.rbr_1x1 = conv_bn(in_channels=in_channels, out_channels=out_channels, kernel_size=1, stride=stride,
-                                   padding=padding_11, groups=groups)
+            self.rbr_identity = (
+                nn.BatchNorm2d(num_features=in_channels) if out_channels == in_channels and stride == 1 else None
+            )
+            self.rbr_dense = conv_bn(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=kernel_size,
+                stride=stride,
+                padding=padding,
+                groups=groups,
+            )
+            self.rbr_1x1 = conv_bn(
+                in_channels=in_channels,
+                out_channels=out_channels,
+                kernel_size=1,
+                stride=stride,
+                padding=padding_11,
+                groups=groups,
+            )
 
     def forward(self, inputs):
-        '''Forward process'''
-        if hasattr(self, 'rbr_reparam'):
+        """Forward process."""
+        if hasattr(self, "rbr_reparam"):
             return self.nonlinearity(self.se(self.rbr_reparam(inputs)))
 
         if self.rbr_identity is None:
@@ -307,7 +397,7 @@ class RepVGGBlock(nn.Module):
             eps = branch.bn.eps
         else:
             assert isinstance(branch, nn.BatchNorm2d)
-            if not hasattr(self, 'id_tensor'):
+            if not hasattr(self, "id_tensor"):
                 input_dim = self.in_channels // self.groups
                 kernel_value = np.zeros((self.in_channels, input_dim, 3, 3), dtype=np.float32)
                 for i in range(self.in_channels):
@@ -324,45 +414,48 @@ class RepVGGBlock(nn.Module):
         return kernel * t, beta - running_mean * gamma / std
 
     def switch_to_deploy(self):
-        if hasattr(self, 'rbr_reparam'):
+        if hasattr(self, "rbr_reparam"):
             return
         kernel, bias = self.get_equivalent_kernel_bias()
-        self.rbr_reparam = nn.Conv2d(in_channels=self.rbr_dense.conv.in_channels,
-                                     out_channels=self.rbr_dense.conv.out_channels,
-                                     kernel_size=self.rbr_dense.conv.kernel_size, stride=self.rbr_dense.conv.stride,
-                                     padding=self.rbr_dense.conv.padding, dilation=self.rbr_dense.conv.dilation,
-                                     groups=self.rbr_dense.conv.groups, bias=True)
+        self.rbr_reparam = nn.Conv2d(
+            in_channels=self.rbr_dense.conv.in_channels,
+            out_channels=self.rbr_dense.conv.out_channels,
+            kernel_size=self.rbr_dense.conv.kernel_size,
+            stride=self.rbr_dense.conv.stride,
+            padding=self.rbr_dense.conv.padding,
+            dilation=self.rbr_dense.conv.dilation,
+            groups=self.rbr_dense.conv.groups,
+            bias=True,
+        )
         self.rbr_reparam.weight.data = kernel
         self.rbr_reparam.bias.data = bias
         for para in self.parameters():
             para.detach_()
-        self.__delattr__('rbr_dense')
-        self.__delattr__('rbr_1x1')
-        if hasattr(self, 'rbr_identity'):
-            self.__delattr__('rbr_identity')
-        if hasattr(self, 'id_tensor'):
-            self.__delattr__('id_tensor')
+        self.__delattr__("rbr_dense")
+        self.__delattr__("rbr_1x1")
+        if hasattr(self, "rbr_identity"):
+            self.__delattr__("rbr_identity")
+        if hasattr(self, "id_tensor"):
+            self.__delattr__("id_tensor")
         self.deploy = True
 
 
 class RepBlock(nn.Module):
-    '''
-        RepBlock is a stage block with rep-style basic block
-    '''
+    """RepBlock is a stage block with rep-style basic block."""
 
     def __init__(self, in_channels, out_channels, n=1, block=RepVGGBlock, basic_block=RepVGGBlock):
         super().__init__()
 
         self.conv1 = block(in_channels, out_channels)
         self.block = nn.Sequential(*(block(out_channels, out_channels) for _ in range(n - 1))) if n > 1 else None
-        '''
+        """
         if block == BottleRep:
             self.conv1 = BottleRep(in_channels, out_channels, basic_block=basic_block, weight=True)
             n = n // 2
             self.block = nn.Sequential(
                     *(BottleRep(out_channels, out_channels, basic_block=basic_block, weight=True) for _ in
                       range(n - 1))) if n > 1 else None
-        '''
+        """
 
     def forward(self, x):
         x = self.conv1(x)
@@ -373,13 +466,13 @@ class RepBlock(nn.Module):
 
 class Inject(nn.Module):
     def __init__(
-            self,
-            inp: int,
-            oup: int,
-            global_index: int,
-            norm_cfg=dict(type='BN', requires_grad=True),
-            activations=nn.ReLU6,
-            global_inp=None,
+        self,
+        inp: int,
+        oup: int,
+        global_index: int,
+        norm_cfg=dict(type="BN", requires_grad=True),
+        activations=nn.ReLU6,
+        global_inp=None,
     ) -> None:
         super().__init__()
         self.global_index = global_index
@@ -394,13 +487,11 @@ class Inject(nn.Module):
         self.act = h_sigmoid()
 
     def forward(self, x_l, x_g):
-        '''
-        x_g: global features
-        x_l: local features
-        '''
+        """x_g: global features x_l: local features.
+        """
         x_g = x_g[self.global_index]
-        B, C, H, W = x_l.shape
-        g_B, g_C, g_H, g_W = x_g.shape
+        _B, _C, H, W = x_l.shape
+        _g_B, _g_C, g_H, _g_W = x_g.shape
         use_pool = H < g_H
 
         local_feat = self.local_embedding(x_l)
@@ -416,8 +507,8 @@ class Inject(nn.Module):
             global_feat = avg_pool(global_feat, output_size)
 
         else:
-            sig_act = F.interpolate(self.act(global_act), size=(H, W), mode='bilinear', align_corners=False)
-            global_feat = F.interpolate(global_feat, size=(H, W), mode='bilinear', align_corners=False)
+            sig_act = F.interpolate(self.act(global_act), size=(H, W), mode="bilinear", align_corners=False)
+            global_feat = F.interpolate(global_feat, size=(H, W), mode="bilinear", align_corners=False)
 
         out = local_feat * sig_act + global_feat
         return out
@@ -425,7 +516,7 @@ class Inject(nn.Module):
 
 class h_sigmoid(nn.Module):
     def __init__(self, inplace=True):
-        super(h_sigmoid, self).__init__()
+        super().__init__()
         self.relu = nn.ReLU6(inplace=inplace)
 
     def forward(self, x):
@@ -448,7 +539,7 @@ class Low_LAF(nn.Module):
         self.downsample = nn.functional.adaptive_avg_pool2d
 
     def forward(self, x):
-        N, C, H, W = x[1].shape
+        _N, _C, H, W = x[1].shape
         # output_size = np.array([H, W])
         output_size = [H, W]
 
@@ -458,12 +549,12 @@ class Low_LAF(nn.Module):
 
         x0 = self.downsample(x[0], output_size)
         x1 = self.cv1(x[1])
-        x2 = F.interpolate(x[2], size=(H, W), mode='bilinear', align_corners=False)
+        x2 = F.interpolate(x[2], size=(H, W), mode="bilinear", align_corners=False)
         return self.cv_fuse(torch.cat((x0, x1, x2), dim=1))
 
 
 class SimConv(nn.Module):
-    '''Normal Conv with ReLU VAN_activation'''
+    """Normal Conv with ReLU VAN_activation."""
 
     def __init__(self, in_channels, out_channels, kernel_size, stride=1, groups=1, bias=False, padding=None):
         super().__init__()
@@ -501,8 +592,11 @@ class Low_IFM(nn.Module):
     def __init__(self, in_channels, embed_dims, fuse_block_num, out_channels):
         super().__init__()
         self.conv1 = Conv(in_channels, embed_dims, kernel_size=1, stride=1, padding=0)
-        self.block = nn.ModuleList(
-            [RepVGGBlock(embed_dims, embed_dims) for _ in range(fuse_block_num)]) if fuse_block_num > 0 else nn.Identity
+        self.block = (
+            nn.ModuleList([RepVGGBlock(embed_dims, embed_dims) for _ in range(fuse_block_num)])
+            if fuse_block_num > 0
+            else nn.Identity
+        )
         self.conv2 = Conv(embed_dims, out_channels, kernel_size=1, stride=1, padding=0)
 
     def forward(self, x):
@@ -520,7 +614,7 @@ class Low_FAM(nn.Module):
 
     def forward(self, x):
         x_l, x_m, x_s, x_n = x
-        B, C, H, W = x_s.shape
+        _B, _C, H, W = x_s.shape
         # output_size = np.array([H, W])
         output_size = [H, W]
 
@@ -529,24 +623,33 @@ class Low_FAM(nn.Module):
 
         x_l = self.avg_pool(x_l, output_size)
         x_m = self.avg_pool(x_m, output_size)
-        x_n = F.interpolate(x_n, size=(H, W), mode='bilinear', align_corners=False)
+        x_n = F.interpolate(x_n, size=(H, W), mode="bilinear", align_corners=False)
 
         out = torch.cat([x_l, x_m, x_s, x_n], 1)
         return out
 
 
 def conv_bn(in_channels, out_channels, kernel_size, stride, padding, groups=1, bias=False):
-    '''Basic cell for rep-style block, including conv and bn'''
+    """Basic cell for rep-style block, including conv and bn."""
     result = nn.Sequential()
-    result.add_module('conv', nn.Conv2d(in_channels=in_channels, out_channels=out_channels,
-                                        kernel_size=kernel_size, stride=stride, padding=padding, groups=groups,
-                                        bias=bias))
-    result.add_module('bn', nn.BatchNorm2d(num_features=out_channels))
+    result.add_module(
+        "conv",
+        nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=out_channels,
+            kernel_size=kernel_size,
+            stride=stride,
+            padding=padding,
+            groups=groups,
+            bias=bias,
+        ),
+    )
+    result.add_module("bn", nn.BatchNorm2d(num_features=out_channels))
     return result
 
 
 class Conv(nn.Module):
-    '''Normal Conv with SiLU VAN_activation'''
+    """Normal Conv with SiLU VAN_activation."""
 
     def __init__(self, in_channels, out_channels, kernel_size, stride, groups=1, bias=False, padding=None):
         super().__init__()

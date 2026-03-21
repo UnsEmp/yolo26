@@ -1,12 +1,24 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
 from einops import rearrange
 
-__all__ = ['FocusedLinearAttention', 'C2f_FLA']
+__all__ = ["C2f_FLA", "FocusedLinearAttention"]
+
+
 class FocusedLinearAttention(nn.Module):
-    def __init__(self, dim, num_patches=64, num_heads=8, qkv_bias=True, qk_scale=None, attn_drop=0.0, proj_drop=0.0,
-                 sr_ratio=1,
-                 focusing_factor=3.0, kernel_size=5):
+    def __init__(
+        self,
+        dim,
+        num_patches=64,
+        num_heads=8,
+        qkv_bias=True,
+        qk_scale=None,
+        attn_drop=0.0,
+        proj_drop=0.0,
+        sr_ratio=1,
+        focusing_factor=3.0,
+        kernel_size=5,
+    ):
         super().__init__()
         assert dim % num_heads == 0, f"dim {dim} should be divided by num_heads {num_heads}."
         self.dim = dim
@@ -25,19 +37,24 @@ class FocusedLinearAttention(nn.Module):
             self.norm = nn.LayerNorm(dim)
 
         self.focusing_factor = focusing_factor
-        self.dwc = nn.Conv2d(in_channels=head_dim, out_channels=head_dim, kernel_size=kernel_size,
-                             groups=head_dim, padding=kernel_size // 2)
+        self.dwc = nn.Conv2d(
+            in_channels=head_dim,
+            out_channels=head_dim,
+            kernel_size=kernel_size,
+            groups=head_dim,
+            padding=kernel_size // 2,
+        )
         self.scale = nn.Parameter(torch.zeros(size=(1, 1, dim)))
         # self.positional_encoding = nn.Parameter(torch.zeros(size=(1, num_patches // (sr_ratio * sr_ratio), dim)))
 
     def forward(self, x):
-        print( "start: shape ",x.shape)
+        print("start: shape ", x.shape)
         B, C, H, W = x.shape  # 输入为四维：[批次大小, 通道数, 高度, 宽度]
         dtype, device = x.dtype, x.device
         # 调整输入以匹配原始模块的预期格式
-        x = rearrange(x, 'b c h w -> b (h w) c')
+        x = rearrange(x, "b c h w -> b (h w) c")
 
-        print("rearrange: shape ",x.shape)
+        print("rearrange: shape ", x.shape)
         q = self.q(x)
         if self.sr_ratio > 1:
             x_ = x.permute(0, 2, 1).reshape(B, C, H, W)
@@ -60,8 +77,8 @@ class FocusedLinearAttention(nn.Module):
         k = k / scale
         q_norm = q.norm(dim=-1, keepdim=True)
         k_norm = k.norm(dim=-1, keepdim=True)
-        q = q ** focusing_factor
-        k = k ** focusing_factor
+        q = q**focusing_factor
+        k = k**focusing_factor
         q = (q / q.norm(dim=-1, keepdim=True)) * q_norm
         k = (k / k.norm(dim=-1, keepdim=True)) * k_norm
         bool = False
@@ -80,7 +97,7 @@ class FocusedLinearAttention(nn.Module):
             qk = torch.einsum("b i c, b j c -> b i j", q, k)
             x = torch.einsum("b i j, b j d, b i -> b i d", qk, v, z)
         if self.sr_ratio > 1:
-            v = nn.functional.interpolate(v.permute(0, 2, 1), size=x.shape[1], mode='linear').permute(0, 2, 1)
+            v = nn.functional.interpolate(v.permute(0, 2, 1), size=x.shape[1], mode="linear").permute(0, 2, 1)
         if bool:
             v = v.to(torch.float16)
             x = x.to(torch.float16)
@@ -93,7 +110,7 @@ class FocusedLinearAttention(nn.Module):
 
         x = self.proj(x)
         x = self.proj_drop(x)
-        x = rearrange(x, 'b (h w) c -> b c h w', h=H, w=W)
+        x = rearrange(x, "b (h w) c -> b c h w", h=H, w=W)
         return x
 
 
@@ -108,6 +125,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
