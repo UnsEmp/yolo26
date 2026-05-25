@@ -4,7 +4,7 @@ import torch
 import torch.nn as nn
 import math
 import torch.nn.functional as F
-from ultralytics.nn.modules.conv import Conv
+from ultralytics.nn.modules.conv import Conv.
 
 
 # 深度可分离卷积 (Depthwise Separable Convolution)
@@ -58,7 +58,7 @@ class AdaptivePSABlock(nn.Module):
         self.conv_layers = nn.ModuleList([
             DepthwiseSeparableConv(in_channels, in_channels, kernel_size=k, padding=k//2) for k in kernel_sizes
         ])
-        
+
         # 学习空间注意力图
         self.attention_fc = nn.Sequential(
             nn.Conv2d(len(kernel_sizes) * in_channels, in_channels, kernel_size=1, bias=False),
@@ -253,18 +253,21 @@ def init_weights(model):
 ############################################################################
 
 
+import math
+
 import torch
 import torch.nn as nn
-import math
 import torch.nn.functional as F
-from ultralytics.nn.modules.conv import Conv  # 深度可分离卷积 (Depthwise Separable Convolution)
+
 
 # 动态卷积核生成（Dynamic Kernel Generation）和深度可分离卷积优化
 class DepthwiseSeparableConv(nn.Module):
     def __init__(self, in_channels, out_channels, kernel_size=3, stride=1, padding=1, dynamic=False):
-        super(DepthwiseSeparableConv, self).__init__()
+        super().__init__()
         self.dynamic = dynamic
-        self.depthwise = nn.Conv2d(in_channels, in_channels, kernel_size, stride, padding, groups=in_channels, bias=False)
+        self.depthwise = nn.Conv2d(
+            in_channels, in_channels, kernel_size, stride, padding, groups=in_channels, bias=False
+        )
         self.pointwise = nn.Conv2d(in_channels, out_channels, 1, 1, 0, bias=False)
         self.bn = nn.BatchNorm2d(out_channels)
         self.act = nn.Mish()  # 使用Mish激活函数，提升训练表现
@@ -279,9 +282,10 @@ class DepthwiseSeparableConv(nn.Module):
             self.depthwise.weight = nn.Parameter(kernel)  # 动态调整卷积核
         return self.act(self.bn(self.pointwise(self.depthwise(x))))  # 使用Mish激活函数
 
+
 class MSAC2PSA(nn.Module):
     def __init__(self, c1: int, c2: int, n: int = 1, e: float = 0.5):
-        """MSAC2PSA模块，增强了特征提取能力"""
+        """MSAC2PSA模块，增强了特征提取能力."""
         super().__init__()
         assert c1 == c2
         self.c = int(c1 * e)
@@ -309,21 +313,23 @@ class MSAC2PSA(nn.Module):
         t = self.cv2(output)  # 输出最终结果
         return t
 
+
 class AdaptivePSABlock(nn.Module):
     def __init__(self, in_channels, kernel_sizes=(3, 5, 7), attn_ratio=0.5, num_heads=8):
-        """自适应PSABlock，增强了轻量化性能和空间注意力图学习"""
-        super(AdaptivePSABlock, self).__init__()
+        """自适应PSABlock，增强了轻量化性能和空间注意力图学习."""
+        super().__init__()
         self.kernel_sizes = kernel_sizes
         self.attn_ratio = attn_ratio
         self.num_heads = num_heads
 
         # 使用深度可分离卷积来减少计算量
-        self.conv_layers = nn.ModuleList([DepthwiseSeparableConv(in_channels, in_channels, kernel_size=k, padding=k//2) for k in kernel_sizes])
+        self.conv_layers = nn.ModuleList(
+            [DepthwiseSeparableConv(in_channels, in_channels, kernel_size=k, padding=k // 2) for k in kernel_sizes]
+        )
 
         # 学习空间注意力图
         self.attention_fc = nn.Sequential(
-            nn.Conv2d(len(kernel_sizes) * in_channels, in_channels, kernel_size=1, bias=False),
-            nn.Sigmoid()
+            nn.Conv2d(len(kernel_sizes) * in_channels, in_channels, kernel_size=1, bias=False), nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -333,25 +339,27 @@ class AdaptivePSABlock(nn.Module):
         attention = self.attention_fc(features)  # 学习空间注意力图
         return x * attention  # 用注意力图对输入特征图进行加权
 
+
 class SELayer(nn.Module):
     def __init__(self, channel, reduction=16):
-        """Squeeze-and-Excitation模块，增强通道间的关系"""
-        super(SELayer, self).__init__()
+        """Squeeze-and-Excitation模块，增强通道间的关系."""
+        super().__init__()
         self.fc = nn.Sequential(
             nn.AdaptiveAvgPool2d(1),  # 全局平均池化
             nn.Conv2d(channel, channel // reduction, 1, bias=False),
             nn.ReLU(inplace=True),
             nn.Conv2d(channel // reduction, channel, 1, bias=False),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
         return x * self.fc(x)  # 对特征图应用SE模块
 
+
 class CrossAttention(nn.Module):
     def __init__(self, in_channels, num_heads=4):
-        """跨通道注意力机制，增强通道间信息流"""
-        super(CrossAttention, self).__init__()
+        """跨通道注意力机制，增强通道间信息流."""
+        super().__init__()
         self.num_heads = num_heads
         self.attn_heads = nn.ModuleList([ECAAttention(in_channels) for _ in range(num_heads)])
         self.sampling_offsets = nn.Linear(in_channels, 2 * num_heads)  # 学习采样偏移量
@@ -360,23 +368,32 @@ class CrossAttention(nn.Module):
         sampled_values = [head(x) for head in self.attn_heads]
         return torch.cat(sampled_values, dim=1)  # 将多个通道头的结果拼接
 
+
 class ECAAttention(nn.Module):
     def __init__(self, in_channels, gamma=2, b=1):
-        """高效通道注意力机制（ECA），减少计算量"""
-        super(ECAAttention, self).__init__()
+        """高效通道注意力机制（ECA），减少计算量."""
+        super().__init__()
         t = int(abs((math.log(in_channels, 2) + b) / gamma))  # 计算卷积核大小
         self.kernel_size = t if t % 2 else t + 1  # 确保卷积核大小为奇数
-        self.conv = nn.Conv2d(in_channels, in_channels, kernel_size=self.kernel_size, padding=self.kernel_size // 2, groups=in_channels, bias=False)
+        self.conv = nn.Conv2d(
+            in_channels,
+            in_channels,
+            kernel_size=self.kernel_size,
+            padding=self.kernel_size // 2,
+            groups=in_channels,
+            bias=False,
+        )
 
     def forward(self, x):
         return x * torch.sigmoid(self.conv(x))  # 使用sigmoid控制通道重要性
 
+
 # 为更好的收敛，增加了权重初始化
 def init_weights(model):
-    """初始化模型权重，加速收敛过程。"""
+    """初始化模型权重，加速收敛过程。."""
     for m in model.modules():
         if isinstance(m, nn.Conv2d):
-            nn.init.kaiming_normal_(m.weight, mode='fan_out', nonlinearity='relu')
+            nn.init.kaiming_normal_(m.weight, mode="fan_out", nonlinearity="relu")
             if m.bias is not None:
                 nn.init.zeros_(m.bias)
         elif isinstance(m, nn.Linear):
