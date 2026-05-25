@@ -1,7 +1,7 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['C2f_Dual']
+__all__ = ["C2f_Dual"]
 
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
@@ -15,6 +15,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -40,9 +41,9 @@ class DualConv(nn.Module):
         :param input_channels: the number of input channels
         :param output_channels: the number of output channels
         :param stride: convolution stride
-        :param g: the value of G used in DualConv
+        :param g: the value of G used in DualConv.
         """
-        super(DualConv, self).__init__()
+        super().__init__()
         # Group Convolution
         self.gc = nn.Conv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1, groups=g, bias=False)
         # Pointwise Convolution
@@ -52,7 +53,7 @@ class DualConv(nn.Module):
         """
         Define how DualConv processes the input images or input feature maps.
         :param input_data: input images or input feature maps
-        :return: return output feature maps
+        :return: return output feature maps.
         """
         return self.gc(input_data) + self.pwc(input_data)
 

@@ -1,12 +1,14 @@
-import torch.nn as nn
 import torch
+import torch.nn as nn
+
 try:
     from ultralytics.nn.DCNv4_op.DCNv4.modules.dcnv4 import DCNv4
 except:
     pass
 
 
-__all__ = ['C2f_DCNv4']
+__all__ = ["C2f_DCNv4"]
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -19,6 +21,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -82,6 +85,3 @@ class C2f_DCNv4(nn.Module):
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
-
-
-
