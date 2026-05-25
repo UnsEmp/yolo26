@@ -1,14 +1,16 @@
 import torch
 import torch.nn as nn
 
-__all__ = ['Focus']
+__all__ = ["Focus"]
+
 
 class SiLU(nn.Module):
-    """export-friendly version of nn.SiLU()"""
+    """Export-friendly version of nn.SiLU()."""
 
     @staticmethod
     def forward(x):
         return x * torch.sigmoid(x)
+
 
 def get_activation(name="silu", inplace=True):
     if name == "silu":
@@ -18,15 +20,14 @@ def get_activation(name="silu", inplace=True):
     elif name == "lrelu":
         module = nn.LeakyReLU(0.1, inplace=inplace)
     else:
-        raise AttributeError("Unsupported act type: {}".format(name))
+        raise AttributeError(f"Unsupported act type: {name}")
     return module
 
-class BaseConv(nn.Module):
-    """A Conv2d -> Batchnorm -> silu/leaky relu block"""
 
-    def __init__(
-        self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act="silu"
-    ):
+class BaseConv(nn.Module):
+    """A Conv2d -> Batchnorm -> silu/leaky relu block."""
+
+    def __init__(self, in_channels, out_channels, ksize, stride, groups=1, bias=False, act="silu"):
         super().__init__()
         # same padding
         pad = (ksize - 1) // 2
@@ -47,6 +48,7 @@ class BaseConv(nn.Module):
 
     def fuseforward(self, x):
         return self.act(self.conv(x))
+
 
 class Focus(nn.Module):
     """Focus width and height information into channel space."""
@@ -73,7 +75,7 @@ class Focus(nn.Module):
         return self.conv(x)
 
 
-if __name__ == '__main__':
+if __name__ == "__main__":
     x = torch.randn(1, 32, 16, 16)
     model = Focus(32, 32)
     print(model(x).shape)

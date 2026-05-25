@@ -1,19 +1,13 @@
 import torch
 import torch.nn as nn
-from ultralytics.nn.modules.conv import autopad, Conv
 
-__all__ = ['SAConv2d', 'C2f_SAConv']
+from ultralytics.nn.modules.conv import Conv, autopad
+
+__all__ = ["C2f_SAConv", "SAConv2d"]
+
 
 class ConvAWS2d(nn.Conv2d):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 stride=1,
-                 padding=0,
-                 dilation=1,
-                 groups=1,
-                 bias=True):
+    def __init__(self, in_channels, out_channels, kernel_size, stride=1, padding=0, dilation=1, groups=1, bias=True):
         super().__init__(
             in_channels,
             out_channels,
@@ -22,13 +16,13 @@ class ConvAWS2d(nn.Conv2d):
             padding=padding,
             dilation=dilation,
             groups=groups,
-            bias=bias)
-        self.register_buffer('weight_gamma', torch.ones(self.out_channels, 1, 1, 1))
-        self.register_buffer('weight_beta', torch.zeros(self.out_channels, 1, 1, 1))
+            bias=bias,
+        )
+        self.register_buffer("weight_gamma", torch.ones(self.out_channels, 1, 1, 1))
+        self.register_buffer("weight_beta", torch.zeros(self.out_channels, 1, 1, 1))
 
     def _get_weight(self, weight):
-        weight_mean = weight.mean(dim=1, keepdim=True).mean(dim=2,
-                                                            keepdim=True).mean(dim=3, keepdim=True)
+        weight_mean = weight.mean(dim=1, keepdim=True).mean(dim=2, keepdim=True).mean(dim=3, keepdim=True)
         weight = weight - weight_mean
         std = torch.sqrt(weight.view(weight.size(0), -1).var(dim=1) + 1e-5).view(-1, 1, 1, 1)
         weight = weight / std
@@ -39,32 +33,24 @@ class ConvAWS2d(nn.Conv2d):
         weight = self._get_weight(self.weight)
         return super()._conv_forward(x, weight, None)
 
-    def _load_from_state_dict(self, state_dict, prefix, local_metadata, strict,
-                              missing_keys, unexpected_keys, error_msgs):
+    def _load_from_state_dict(
+        self, state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+    ):
         self.weight_gamma.data.fill_(-1)
-        super()._load_from_state_dict(state_dict, prefix, local_metadata, strict,
-                                      missing_keys, unexpected_keys, error_msgs)
+        super()._load_from_state_dict(
+            state_dict, prefix, local_metadata, strict, missing_keys, unexpected_keys, error_msgs
+        )
         if self.weight_gamma.data.mean() > 0:
             return
         weight = self.weight.data
-        weight_mean = weight.data.mean(dim=1, keepdim=True).mean(dim=2,
-                                                                 keepdim=True).mean(dim=3, keepdim=True)
+        weight_mean = weight.data.mean(dim=1, keepdim=True).mean(dim=2, keepdim=True).mean(dim=3, keepdim=True)
         self.weight_beta.data.copy_(weight_mean)
         std = torch.sqrt(weight.view(weight.size(0), -1).var(dim=1) + 1e-5).view(-1, 1, 1, 1)
         self.weight_gamma.data.copy_(std)
 
 
 class SAConv2d(ConvAWS2d):
-    def __init__(self,
-                 in_channels,
-                 out_channels,
-                 kernel_size,
-                 s=1,
-                 p=None,
-                 g=1,
-                 d=1,
-                 act=True,
-                 bias=True):
+    def __init__(self, in_channels, out_channels, kernel_size, s=1, p=None, g=1, d=1, act=True, bias=True):
         super().__init__(
             in_channels,
             out_channels,
@@ -73,29 +59,17 @@ class SAConv2d(ConvAWS2d):
             padding=autopad(kernel_size, p, d),
             dilation=d,
             groups=g,
-            bias=bias)
-        self.switch = torch.nn.Conv2d(
-            self.in_channels,
-            1,
-            kernel_size=1,
-            stride=s,
-            bias=True)
+            bias=bias,
+        )
+        self.switch = torch.nn.Conv2d(self.in_channels, 1, kernel_size=1, stride=s, bias=True)
         self.switch.weight.data.fill_(0)
         self.switch.bias.data.fill_(1)
         self.weight_diff = torch.nn.Parameter(torch.Tensor(self.weight.size()))
         self.weight_diff.data.zero_()
-        self.pre_context = torch.nn.Conv2d(
-            self.in_channels,
-            self.in_channels,
-            kernel_size=1,
-            bias=True)
+        self.pre_context = torch.nn.Conv2d(self.in_channels, self.in_channels, kernel_size=1, bias=True)
         self.pre_context.weight.data.fill_(0)
         self.pre_context.bias.data.fill_(0)
-        self.post_context = torch.nn.Conv2d(
-            self.out_channels,
-            self.out_channels,
-            kernel_size=1,
-            bias=True)
+        self.post_context = torch.nn.Conv2d(self.out_channels, self.out_channels, kernel_size=1, bias=True)
         self.post_context.weight.data.fill_(0)
         self.post_context.bias.data.fill_(0)
 
@@ -162,7 +136,8 @@ class C2f_SAConv(nn.Module):
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
         self.m = nn.ModuleList(
-            Bottleneck_SAConv(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+            Bottleneck_SAConv(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n)
+        )
 
     def forward(self, x):
         """Forward pass through C2f layer."""
