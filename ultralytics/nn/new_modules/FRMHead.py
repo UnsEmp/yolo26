@@ -1,9 +1,12 @@
-import torch
-import torch.nn as nn
-from ultralytics.utils.tal import dist2bbox, make_anchors
 import math
 
-__all__ = ['Detect_FRM']
+import torch
+import torch.nn as nn
+
+from ultralytics.utils.tal import dist2bbox, make_anchors
+
+__all__ = ["Detect_FRM"]
+
 
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
@@ -16,6 +19,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -35,9 +39,7 @@ class Conv(nn.Module):
 
 
 class DFL(nn.Module):
-    """
-    Integral module of Distribution Focal Loss (DFL).
-    """
+    """Integral module of Distribution Focal Loss (DFL)."""
 
     def __init__(self, c1=16):
         """Initialize a convolutional layer with a given number of input channels."""
@@ -49,7 +51,7 @@ class DFL(nn.Module):
 
     def forward(self, x):
         """Applies a transformer layer on input tensor 'x' and returns a tensor."""
-        b, c, a = x.shape  # batch, channels, anchors
+        b, _c, a = x.shape  # batch, channels, anchors
         return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
@@ -58,7 +60,7 @@ class PCRC(nn.Module):
     def __init__(self):
         super().__init__()
         self.C1 = nn.Conv2d(3, 512 * 3, kernel_size=1)
-        self.R1 = nn.Upsample(None, 2, 'nearest')  # 上采样扩充2倍采用邻近扩充
+        self.R1 = nn.Upsample(None, 2, "nearest")  # 上采样扩充2倍采用邻近扩充
         self.mcrc = nn.Sequential(
             nn.MaxPool2d(kernel_size=2, stride=2),
             nn.Conv2d(512 * 3, 512 * 3, kernel_size=3, padding=1),
@@ -86,7 +88,7 @@ class FRM(nn.Module):
         channel2 = ch[1]  # 128
         channel3 = ch[2]  # 256
         self.split_stride = channel2
-        self.R1 = nn.Upsample(None, 2, 'nearest')  # 上采样扩充2倍采用邻近扩充
+        self.R1 = nn.Upsample(None, 2, "nearest")  # 上采样扩充2倍采用邻近扩充
         self.R3 = nn.MaxPool2d(kernel_size=2, stride=2)  # 下采样使用最大池化
         self.C1 = nn.Conv2d(channel1 + channel2 + channel3, 3, kernel_size=1)
         self.C2 = nn.Conv2d(channel2, channel3, kernel_size=1, stride=1)
@@ -103,8 +105,8 @@ class FRM(nn.Module):
         x1 = self.C1(input)
         Conv_1_1 = torch.split(torch.softmax(x1, dim=0), 1, 1)
         Conv_1_2 = torch.split(self.pcrc(x1), self.split_stride, 1)
-        input1 = (self.C2(Conv_1_2[0]) * x0)
-        input2 = (x0 * self.C6(Conv_1_1[0]))
+        input1 = self.C2(Conv_1_2[0]) * x0
+        input2 = x0 * self.C6(Conv_1_1[0])
         y0 = input1 + input2
         y1 = (x[1] * self.C5(Conv_1_1[1])) + (Conv_1_2[1] * x[1])
         y2 = (x2 * self.C4(Conv_1_1[2])) + (self.C3(Conv_1_2[2]) * x2)
@@ -117,6 +119,7 @@ class FRM(nn.Module):
 
 class Detect_FRM(nn.Module):
     """YOLOv8 Detect head for detection models."""
+
     dynamic = False  # force grid reconstruction
     export = False  # export mode
     shape = None
@@ -133,7 +136,8 @@ class Detect_FRM(nn.Module):
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch)
+            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
+        )
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
         self.FRM = FRM(ch=ch)
@@ -152,14 +156,14 @@ class Detect_FRM(nn.Module):
             self.shape = shape
 
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.export and self.format in ('saved_model', 'pb', 'tflite', 'edgetpu', 'tfjs'):  # avoid TF FlexSplitV ops
-            box = x_cat[:, :self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4:]
+        if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            box = x_cat[:, : self.reg_max * 4]
+            cls = x_cat[:, self.reg_max * 4 :]
         else:
             box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = dist2bbox(self.dfl(box), self.anchors.unsqueeze(0), xywh=True, dim=1) * self.strides
 
-        if self.export and self.format in ('tflite', 'edgetpu'):
+        if self.export and self.format in ("tflite", "edgetpu"):
             # Normalize xywh with image size to mitigate quantization error of TFLite integer models as done in YOLOv5:
             # https://github.com/ultralytics/yolov5/blob/0c8de3fca4a702f8ff5c435e67f378d1fce70243/models/tf.py#L307-L309
             # See this PR for details: https://github.com/ultralytics/ultralytics/pull/1695
@@ -178,7 +182,7 @@ class Detect_FRM(nn.Module):
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a[-1].bias.data[:] = 1.0  # box
-            b[-1].bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+            b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
 
 
 if __name__ == "__main__":

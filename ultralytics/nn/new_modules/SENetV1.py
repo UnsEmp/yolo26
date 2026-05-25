@@ -1,18 +1,20 @@
 import torch
 from torch import nn
+
 from .conv import Conv
 
-__all__ = ['C2f_SENetV1', 'SELayerV1']
+__all__ = ["C2f_SENetV1", "SELayerV1"]
+
 
 class SELayerV1(nn.Module):
     def __init__(self, channel, reduction=16):
-        super(SELayerV1, self).__init__()
+        super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(channel, channel // reduction, bias=False),
             nn.ReLU(inplace=True),
             nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):

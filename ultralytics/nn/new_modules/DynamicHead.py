@@ -1,14 +1,17 @@
 import math
+
 try:
     from mmcv.ops import ModulatedDeformConv2d
 except:
     pass
-from ultralytics.utils.tal import dist2bbox, make_anchors
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['Detect_dyhead']
+from ultralytics.utils.tal import dist2bbox, make_anchors
+
+__all__ = ["Detect_dyhead"]
+
 
 def _make_divisible(v, divisor, min_value=None):
     if min_value is None:
@@ -22,7 +25,7 @@ def _make_divisible(v, divisor, min_value=None):
 
 class h_swish(nn.Module):
     def __init__(self, inplace=False):
-        super(h_swish, self).__init__()
+        super().__init__()
         self.inplace = inplace
 
     def forward(self, x):
@@ -31,7 +34,7 @@ class h_swish(nn.Module):
 
 class h_sigmoid(nn.Module):
     def __init__(self, inplace=True, h_max=1):
-        super(h_sigmoid, self).__init__()
+        super().__init__()
         self.relu = nn.ReLU6(inplace=inplace)
         self.h_max = h_max
 
@@ -40,9 +43,19 @@ class h_sigmoid(nn.Module):
 
 
 class DYReLU(nn.Module):
-    def __init__(self, inp, oup, reduction=4, lambda_a=1.0, K2=True, use_bias=True, use_spatial=False,
-                 init_a=[1.0, 0.0], init_b=[0.0, 0.0]):
-        super(DYReLU, self).__init__()
+    def __init__(
+        self,
+        inp,
+        oup,
+        reduction=4,
+        lambda_a=1.0,
+        K2=True,
+        use_bias=True,
+        use_spatial=False,
+        init_a=[1.0, 0.0],
+        init_b=[0.0, 0.0],
+    ):
+        super().__init__()
         self.oup = oup
         self.lambda_a = lambda_a * 2
         self.K2 = K2
@@ -65,10 +78,7 @@ class DYReLU(nn.Module):
         # print('init_a: {}, init_b: {}'.format(self.init_a, self.init_b))
 
         self.fc = nn.Sequential(
-            nn.Linear(inp, squeeze),
-            nn.ReLU(inplace=True),
-            nn.Linear(squeeze, oup * self.exp),
-            h_sigmoid()
+            nn.Linear(inp, squeeze), nn.ReLU(inplace=True), nn.Linear(squeeze, oup * self.exp), h_sigmoid()
         )
         if use_spatial:
             self.spa = nn.Sequential(
@@ -125,7 +135,7 @@ class DYReLU(nn.Module):
 
 class Conv3x3Norm(torch.nn.Module):
     def __init__(self, in_channels, out_channels, stride):
-        super(Conv3x3Norm, self).__init__()
+        super().__init__()
 
         self.conv = ModulatedDeformConv2d(in_channels, out_channels, kernel_size=3, stride=stride, padding=1)
         self.bn = nn.GroupNorm(num_groups=16, num_channels=out_channels)
@@ -138,7 +148,7 @@ class Conv3x3Norm(torch.nn.Module):
 
 class DyConv(nn.Module):
     def __init__(self, in_channels=256, out_channels=256, conv_func=Conv3x3Norm):
-        super(DyConv, self).__init__()
+        super().__init__()
 
         self.DyConv = nn.ModuleList()
         self.DyConv.append(conv_func(in_channels, out_channels, 1))
@@ -146,9 +156,8 @@ class DyConv(nn.Module):
         self.DyConv.append(conv_func(in_channels, out_channels, 2))
 
         self.AttnConv = nn.Sequential(
-            nn.AdaptiveAvgPool2d(1),
-            nn.Conv2d(in_channels, 1, kernel_size=1),
-            nn.ReLU(inplace=True))
+            nn.AdaptiveAvgPool2d(1), nn.Conv2d(in_channels, 1, kernel_size=1), nn.ReLU(inplace=True)
+        )
 
         self.h_sigmoid = h_sigmoid()
         self.relu = DYReLU(in_channels, out_channels)
@@ -171,7 +180,6 @@ class DyConv(nn.Module):
         next_x = {}
         feature_names = list(x.keys())
         for level, name in enumerate(feature_names):
-
             feature = x[name]
 
             offset_mask = self.offset(feature)
@@ -184,8 +192,9 @@ class DyConv(nn.Module):
                 temp_fea.append(self.DyConv[2](x[feature_names[level - 1]], **conv_args))
             if level < len(x) - 1:
                 input = x[feature_names[level + 1]]
-                temp_fea.append(F.interpolate(self.DyConv[0](input, **conv_args),
-                                              size=[feature.size(2), feature.size(3)]))
+                temp_fea.append(
+                    F.interpolate(self.DyConv[0](input, **conv_args), size=[feature.size(2), feature.size(3)])
+                )
             attn_fea = []
             res_fea = []
             for fea in temp_fea:
@@ -211,6 +220,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -228,9 +238,9 @@ class Conv(nn.Module):
         """Perform transposed convolution of 2D data."""
         return self.act(self.conv(x))
 
+
 class DFL(nn.Module):
-    """
-    Integral module of Distribution Focal Loss (DFL).
+    """Integral module of Distribution Focal Loss (DFL).
 
     Proposed in Generalized Focal Loss https://ieeexplore.ieee.org/document/9792391
     """
@@ -245,12 +255,14 @@ class DFL(nn.Module):
 
     def forward(self, x):
         """Applies a transformer layer on input tensor 'x' and returns a tensor."""
-        b, c, a = x.shape  # batch, channels, anchors
+        b, _c, a = x.shape  # batch, channels, anchors
         return self.conv(x.view(b, 4, self.c1, a).transpose(2, 1).softmax(1)).view(b, 4, a)
         # return self.conv(x.view(b, self.c1, 4, a).softmax(1)).view(b, 4, a)
 
+
 class Detect_dyhead(nn.Module):
     """YOLOv8 Detect head for detection models."""
+
     dynamic = False  # force grid reconstruction
     export = False  # export mode
     shape = None
@@ -267,7 +279,8 @@ class Detect_dyhead(nn.Module):
         self.stride = torch.zeros(self.nl)  # strides computed during build
         c2, c3 = max((16, ch[0] // 4, self.reg_max * 4)), max(ch[0], min(self.nc, 100))  # channels
         self.cv2 = nn.ModuleList(
-            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch)
+            nn.Sequential(Conv(x, c2, 3), Conv(c2, c2, 3), nn.Conv2d(c2, 4 * self.reg_max, 1)) for x in ch
+        )
         self.cv3 = nn.ModuleList(nn.Sequential(Conv(x, c3, 3), Conv(c3, c3, 3), nn.Conv2d(c3, self.nc, 1)) for x in ch)
         self.dfl = DFL(self.reg_max) if self.reg_max > 1 else nn.Identity()
         dyhead_tower = []
@@ -280,7 +293,7 @@ class Detect_dyhead(nn.Module):
                     conv_func=Conv3x3Norm,
                 )
             )
-        self.add_module('dyhead_tower', nn.Sequential(*dyhead_tower))
+        self.add_module("dyhead_tower", nn.Sequential(*dyhead_tower))
 
     def forward(self, x):
         tensor_dict = {i: tensor for i, tensor in enumerate(x)}
@@ -297,14 +310,14 @@ class Detect_dyhead(nn.Module):
             self.shape = shape
 
         x_cat = torch.cat([xi.view(shape[0], self.no, -1) for xi in x], 2)
-        if self.export and self.format in ('saved_model', 'pb', 'tflite', 'edgetpu', 'tfjs'):  # avoid TF FlexSplitV ops
-            box = x_cat[:, :self.reg_max * 4]
-            cls = x_cat[:, self.reg_max * 4:]
+        if self.export and self.format in ("saved_model", "pb", "tflite", "edgetpu", "tfjs"):  # avoid TF FlexSplitV ops
+            box = x_cat[:, : self.reg_max * 4]
+            cls = x_cat[:, self.reg_max * 4 :]
         else:
             box, cls = x_cat.split((self.reg_max * 4, self.nc), 1)
         dbox = dist2bbox(self.dfl(box), self.anchors.unsqueeze(0), xywh=True, dim=1) * self.strides
 
-        if self.export and self.format in ('tflite', 'edgetpu'):
+        if self.export and self.format in ("tflite", "edgetpu"):
             # Normalize xywh with image size to mitigate quantization error of TFLite integer models as done in YOLOv5:
             # https://github.com/ultralytics/yolov5/blob/0c8de3fca4a702f8ff5c435e67f378d1fce70243/models/tf.py#L307-L309
             # See this PR for details: https://github.com/ultralytics/ultralytics/pull/1695
@@ -323,4 +336,4 @@ class Detect_dyhead(nn.Module):
         # ncf = math.log(0.6 / (m.nc - 0.999999)) if cf is None else torch.log(cf / cf.sum())  # nominal class frequency
         for a, b, s in zip(m.cv2, m.cv3, m.stride):  # from
             a[-1].bias.data[:] = 1.0  # box
-            b[-1].bias.data[:m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
+            b[-1].bias.data[: m.nc] = math.log(5 / m.nc / (640 / s) ** 2)  # cls (.01 objects, 80 classes, 640 img)
