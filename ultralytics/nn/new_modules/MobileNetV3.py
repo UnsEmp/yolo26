@@ -1,18 +1,19 @@
 """A from-scratch implementation of MobileNetV3 paper ( for educational purposes ).
 Paper
     Searching for MobileNetV3 - https://arxiv.org/abs/1905.02244v5
-author : shubham.aiengineer@gmail.com
+author : shubham.aiengineer@gmail.com.
 """
 
 import torch
 from torch import nn
-from torchsummary import summary
 
-__all__ = ['MobileNetV3']
+__all__ = ["MobileNetV3"]
+
 
 class SqueezeExitationBlock(nn.Module):
     def __init__(self, in_channels: int):
         """Constructor for SqueezeExitationBlock.
+
         Args:
             in_channels (int): Number of input channels.
         """
@@ -28,7 +29,6 @@ class SqueezeExitationBlock(nn.Module):
 
     def forward(self, x):
         """Forward pass for SqueezeExitationBlock."""
-
         identity = x
 
         x = self.pool1(x)
@@ -45,24 +45,25 @@ class SqueezeExitationBlock(nn.Module):
 
 class ConvNormActivationBlock(nn.Module):
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: int,
-            kernel_size: list,
-            stride: int = 1,
-            padding: int = 0,
-            groups: int = 1,
-            bias: bool = False,
-            activation: torch.nn = nn.Hardswish,
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: list,
+        stride: int = 1,
+        padding: int = 0,
+        groups: int = 1,
+        bias: bool = False,
+        activation: torch.nn = nn.Hardswish,
     ):
-        """Constructs a block containing a convolution, batch normalization and activation layer
+        """Constructs a block containing a convolution, batch normalization and activation layer.
+
         Args:
             in_channels (int): number of input channels
             out_channels (int): number of output channels
             kernel_size (list): size of the convolutional kernel
             stride (int, optional): stride of the convolutional kernel. Defaults to 1.
             padding (int, optional): padding of the convolutional kernel. Defaults to 0.
-            groups (int, optional): number of groups for depthwise seperable convolution. Defaults to 1.
+            groups (int, optional): number of groups for depthwise separable convolution. Defaults to 1.
             bias (bool, optional): whether to use bias. Defaults to False.
             activation (torch.nn, optional): activation function. Defaults to nn.Hardswish.
         """
@@ -82,7 +83,6 @@ class ConvNormActivationBlock(nn.Module):
 
     def forward(self, x):
         """Perform forward pass."""
-
         x = self.conv(x)
         x = self.norm(x)
         x = self.activation(x)
@@ -92,36 +92,33 @@ class ConvNormActivationBlock(nn.Module):
 
 class InverseResidualBlock(nn.Module):
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: int,
-            kernel_size: int,
-            expansion_size: int = 6,
-            stride: int = 1,
-            squeeze_exitation: bool = True,
-            activation: nn.Module = nn.Hardswish,
+        self,
+        in_channels: int,
+        out_channels: int,
+        kernel_size: int,
+        expansion_size: int = 6,
+        stride: int = 1,
+        squeeze_exitation: bool = True,
+        activation: nn.Module = nn.Hardswish,
     ):
+        """Constructs a inverse residual block.
 
-        """Constructs a inverse residual block
         Args:
             in_channels (int): number of input channels
             out_channels (int): number of output channels
             kernel_size (int): size of the convolutional kernel
             expansion_size (int, optional): size of the expansion factor. Defaults to 6.
             stride (int, optional): stride of the convolutional kernel. Defaults to 1.
-            squeeze_exitation (bool, optional): whether to add squeeze and exitation block or not. Defaults to True.
+            squeeze_exitation (bool, optional): whether to add squeeze and excitation block or not. Defaults to True.
             activation (nn.Module, optional): activation function. Defaults to nn.Hardswish.
         """
-
         super().__init__()
 
         self.residual = in_channels == out_channels and stride == 1
         self.squeeze_exitation = squeeze_exitation
 
         self.conv1 = (
-            ConvNormActivationBlock(
-                in_channels, expansion_size, (1, 1), activation=activation
-            )
+            ConvNormActivationBlock(in_channels, expansion_size, (1, 1), activation=activation)
             if in_channels != expansion_size
             else nn.Identity()
         )  # If it's not the first layer, then we need to add a 1x1 convolutional layer to expand the number of channels
@@ -144,7 +141,6 @@ class InverseResidualBlock(nn.Module):
 
     def forward(self, x):
         """Perform forward pass."""
-
         identity = x
 
         x = self.conv1(x)
@@ -164,24 +160,25 @@ class InverseResidualBlock(nn.Module):
 
 class MobileNetV3(nn.Module):
     def __init__(
-            self,
-            n_classes: int = 1000,
-            input_channel: int = 3,
-            config: str = "large",
-            dropout: float = 0.8,
+        self,
+        n_classes: int = 1000,
+        input_channel: int = 3,
+        config: str = "large",
+        dropout: float = 0.8,
     ):
-        """Constructs MobileNetV3 architecture
+        """Constructs MobileNetV3 architecture.
+
         Args:
-        `n_classes`: An integer count of output neuron in last layer, default 1000
-        `input_channel`: An integer value input channels in first conv layer, default is 3.
-        `config`: A string value indicating the configuration of MobileNetV3, either `large` or `small`, default is `large`.
+            `n_classes`: An integer count of output neuron in last layer, default 1000
+            `input_channel`: An integer value input channels in first conv layer, default is 3.
+            `config`: A string value indicating the configuration of MobileNetV3, either `large` or `small`, default is
+                `large`.
         `dropout` [0, 1] : A float parameter for dropout in last layer, between 0 and 1, default is 0.8.
         """
-
         super().__init__()
 
         # The configuration of MobileNetv3.
-        # input channels, kernel size, expension size, output channels, squeeze exitation, activation, stride
+        # input channels, kernel size, expension size, output channels, squeeze excitation, activation, stride
         RE = nn.ReLU
         HS = nn.Hardswish
         configs_dict = {
@@ -218,19 +215,17 @@ class MobileNetV3(nn.Module):
         }
 
         self.model = nn.Sequential(
-            ConvNormActivationBlock(
-                input_channel, 16, (3, 3), stride=2, padding=1, activation=nn.Hardswish
-            ),
+            ConvNormActivationBlock(input_channel, 16, (3, 3), stride=2, padding=1, activation=nn.Hardswish),
         )
 
         for (
-                in_channels,
-                kernel_size,
-                expansion_size,
-                out_channels,
-                squeeze_exitation,
-                activation,
-                stride,
+            in_channels,
+            kernel_size,
+            expansion_size,
+            out_channels,
+            squeeze_exitation,
+            activation,
+            stride,
         ) in configs_dict[config]:
             self.model.append(
                 InverseResidualBlock(
@@ -256,7 +251,7 @@ class MobileNetV3(nn.Module):
                 activation=nn.Hardswish,
             )
         )
-        if config == 'small':
+        if config == "small":
             self.index = [16, 24, 48, 576]
         else:
             self.index = [24, 40, 112, 960]

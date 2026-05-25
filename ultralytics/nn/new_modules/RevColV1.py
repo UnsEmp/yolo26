@@ -4,14 +4,15 @@
 # Licensed under The Apache License 2.0 [see LICENSE for details]
 # Written by Yuxuan Cai
 # --------------------------------------------------------
-from typing import Tuple, Any, List
-from timm.models.layers import trunc_normal_
+from typing import Any
+
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from timm.models.layers import DropPath
+from timm.models.layers import DropPath, trunc_normal_
 
-__all__ = ['revcol_tiny', 'revcol_small', 'revcol_base', 'revcol_large', 'revcol_xlarge']
+__all__ = ["revcol_base", "revcol_large", "revcol_small", "revcol_tiny", "revcol_xlarge"]
+
 
 class UpSampleConvnext(nn.Module):
     def __init__(self, ratio, inchannel, outchannel):
@@ -20,8 +21,9 @@ class UpSampleConvnext(nn.Module):
         self.channel_reschedule = nn.Sequential(
             # LayerNorm(inchannel, eps=1e-6, data_format="channels_last"),
             nn.Linear(inchannel, outchannel),
-            LayerNorm(outchannel, eps=1e-6, data_format="channels_last"))
-        self.upsample = nn.Upsample(scale_factor=2 ** ratio, mode='nearest')
+            LayerNorm(outchannel, eps=1e-6, data_format="channels_last"),
+        )
+        self.upsample = nn.Upsample(scale_factor=2**ratio, mode="nearest")
 
     def forward(self, x):
         x = x.permute(0, 2, 3, 1)
@@ -32,10 +34,9 @@ class UpSampleConvnext(nn.Module):
 
 
 class LayerNorm(nn.Module):
-    r""" LayerNorm that supports two data formats: channels_last (default) or channels_first.
-    The ordering of the dimensions in the inputs. channels_last corresponds to inputs with
-    shape (batch_size, height, width, channels) while channels_first corresponds to inputs
-    with shape (batch_size, channels, height, width).
+    r"""LayerNorm that supports two data formats: channels_last (default) or channels_first. The ordering of the
+    dimensions in the inputs. channels_last corresponds to inputs with shape (batch_size, height, width, channels)
+    while channels_first corresponds to inputs with shape (batch_size, channels, height, width).
     """
 
     def __init__(self, normalized_shape, eps=1e-6, data_format="channels_first", elementwise_affine=True):
@@ -63,10 +64,10 @@ class LayerNorm(nn.Module):
 
 
 class ConvNextBlock(nn.Module):
-    r""" ConvNeXt Block. There are two equivalent implementations:
-    (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv -> GELU -> 1x1 Conv; all in (N, C, H, W)
-    (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) -> Linear -> GELU -> Linear; Permute back
-    We use (2) as we find it slightly faster in PyTorch
+    r"""ConvNeXt Block. There are two equivalent implementations: (1) DwConv -> LayerNorm (channels_first) -> 1x1 Conv
+    -> GELU -> 1x1 Conv; all in (N, C, H, W) (2) DwConv -> Permute to (N, H, W, C); LayerNorm (channels_last) ->
+    Linear -> GELU -> Linear; Permute back We use (2) as we find it slightly faster in PyTorch.
+
     Args:
         dim (int): Number of input channels.
         drop_path (float): Stochastic depth rate. Default: 0.0
@@ -75,15 +76,19 @@ class ConvNextBlock(nn.Module):
 
     def __init__(self, in_channel, hidden_dim, out_channel, kernel_size=3, layer_scale_init_value=1e-6, drop_path=0.0):
         super().__init__()
-        self.dwconv = nn.Conv2d(in_channel, in_channel, kernel_size=kernel_size, padding=(kernel_size - 1) // 2,
-                                groups=in_channel)  # depthwise conv
+        self.dwconv = nn.Conv2d(
+            in_channel, in_channel, kernel_size=kernel_size, padding=(kernel_size - 1) // 2, groups=in_channel
+        )  # depthwise conv
         self.norm = nn.LayerNorm(in_channel, eps=1e-6)
         self.pwconv1 = nn.Linear(in_channel, hidden_dim)  # pointwise/1x1 convs, implemented with linear layers
         self.act = nn.GELU()
         self.pwconv2 = nn.Linear(hidden_dim, out_channel)
-        self.gamma = nn.Parameter(layer_scale_init_value * torch.ones((out_channel)),
-                                  requires_grad=True) if layer_scale_init_value > 0 else None
-        self.drop_path = DropPath(drop_path) if drop_path > 0. else nn.Identity()
+        self.gamma = (
+            nn.Parameter(layer_scale_init_value * torch.ones(out_channel), requires_grad=True)
+            if layer_scale_init_value > 0
+            else None
+        )
+        self.drop_path = DropPath(drop_path) if drop_path > 0.0 else nn.Identity()
 
     def forward(self, x):
         input = x
@@ -110,9 +115,7 @@ class Decoder(nn.Module):
         self.block_type = block_type
         self._build_decode_layer(dim, depth, kernel_size)
         self.projback = nn.Sequential(
-            nn.Conv2d(
-                in_channels=dim[-1],
-                out_channels=4 ** 2 * 3, kernel_size=1),
+            nn.Conv2d(in_channels=dim[-1], out_channels=4**2 * 3, kernel_size=1),
             nn.PixelShuffle(4),
         )
 
@@ -126,12 +129,8 @@ class Decoder(nn.Module):
         for i in range(1, len(dim)):
             module = [self.block_type(dim[i], dim[i], dim[i], kernel_size) for _ in range(depth[i])]
             normal_layers.append(nn.Sequential(*module))
-            upsample_layers.append(nn.Upsample(scale_factor=2, mode='bilinear', align_corners=True))
-            proj_layers.append(nn.Sequential(
-                nn.Conv2d(dim[i - 1], dim[i], 1, 1),
-                norm_layer(dim[i]),
-                nn.GELU()
-            ))
+            upsample_layers.append(nn.Upsample(scale_factor=2, mode="bilinear", align_corners=True))
+            proj_layers.append(nn.Sequential(nn.Conv2d(dim[i - 1], dim[i], 1, 1), norm_layer(dim[i]), nn.GELU()))
         self.normal_layers = normal_layers
         self.upsample_layers = upsample_layers
         self.proj_layers = proj_layers
@@ -154,9 +153,7 @@ class SimDecoder(nn.Module):
         super().__init__()
         self.projback = nn.Sequential(
             LayerNorm(in_channel),
-            nn.Conv2d(
-                in_channels=in_channel,
-                out_channels=encoder_stride ** 2 * 3, kernel_size=1),
+            nn.Conv2d(in_channels=in_channel, out_channels=encoder_stride**2 * 3, kernel_size=1),
             nn.PixelShuffle(encoder_stride),
         )
 
@@ -164,7 +161,7 @@ class SimDecoder(nn.Module):
         return self.projback(c3)
 
 
-def get_gpu_states(fwd_gpu_devices) -> Tuple[List[int], List[torch.Tensor]]:
+def get_gpu_states(fwd_gpu_devices) -> tuple[list[int], list[torch.Tensor]]:
     # This will not error out if "arg" is a CPU tensor or a non-tensor type because
     # the conditionals short-circuit.
     fwd_gpu_states = []
@@ -176,8 +173,7 @@ def get_gpu_states(fwd_gpu_devices) -> Tuple[List[int], List[torch.Tensor]]:
 
 
 def get_gpu_device(*args):
-    fwd_gpu_devices = list(set(arg.get_device() for arg in args
-                               if isinstance(arg, torch.Tensor) and arg.is_cuda))
+    fwd_gpu_devices = list(set(arg.get_device() for arg in args if isinstance(arg, torch.Tensor) and arg.is_cuda))
     return fwd_gpu_devices
 
 
@@ -188,7 +184,7 @@ def set_device_states(fwd_cpu_state, devices, states) -> None:
             torch.cuda.set_rng_state(state)
 
 
-def detach_and_grad(inputs: Tuple[Any, ...]) -> Tuple[torch.Tensor, ...]:
+def detach_and_grad(inputs: tuple[Any, ...]) -> tuple[torch.Tensor, ...]:
     if isinstance(inputs, tuple):
         out = []
         for inp in inputs:
@@ -201,8 +197,7 @@ def detach_and_grad(inputs: Tuple[Any, ...]) -> Tuple[torch.Tensor, ...]:
             out.append(x)
         return tuple(out)
     else:
-        raise RuntimeError(
-            "Only tuple of tensors is supported. Got Unsupported input type: ", type(inputs).__name__)
+        raise RuntimeError("Only tuple of tensors is supported. Got Unsupported input type: ", type(inputs).__name__)
 
 
 def get_cpu_and_gpu_states(gpu_devices):
@@ -218,12 +213,16 @@ class ReverseFunction(torch.autograd.Function):
         ctx.alpha = alpha
         ctx.preserve_rng_state = True
 
-        ctx.gpu_autocast_kwargs = {"enabled": torch.is_autocast_enabled(),
-                                   "dtype": torch.get_autocast_gpu_dtype(),
-                                   "cache_enabled": torch.is_autocast_cache_enabled()}
-        ctx.cpu_autocast_kwargs = {"enabled": torch.is_autocast_cpu_enabled(),
-                                   "dtype": torch.get_autocast_cpu_dtype(),
-                                   "cache_enabled": torch.is_autocast_cache_enabled()}
+        ctx.gpu_autocast_kwargs = {
+            "enabled": torch.is_autocast_enabled(),
+            "dtype": torch.get_autocast_gpu_dtype(),
+            "cache_enabled": torch.is_autocast_cache_enabled(),
+        }
+        ctx.cpu_autocast_kwargs = {
+            "enabled": torch.is_autocast_cpu_enabled(),
+            "dtype": torch.get_autocast_cpu_dtype(),
+            "cache_enabled": torch.is_autocast_cache_enabled(),
+        }
 
         assert len(args) == 5
         [x, c0, c1, c2, c3] = args
@@ -250,14 +249,12 @@ class ReverseFunction(torch.autograd.Function):
         x, c0, c1, c2, c3 = ctx.saved_tensors
         l0, l1, l2, l3 = ctx.run_functions
         alpha0, alpha1, alpha2, alpha3 = ctx.alpha
-        gx_right, g0_right, g1_right, g2_right, g3_right = grad_outputs
+        _gx_right, g0_right, g1_right, g2_right, g3_right = grad_outputs
         (x, c0, c1, c2, c3) = detach_and_grad((x, c0, c1, c2, c3))
 
-        with torch.enable_grad(), \
-                torch.random.fork_rng(devices=ctx.gpu_devices, enabled=ctx.preserve_rng_state), \
-                torch.cuda.amp.autocast(**ctx.gpu_autocast_kwargs), \
-                torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):
-
+        with torch.enable_grad(), torch.random.fork_rng(
+            devices=ctx.gpu_devices, enabled=ctx.preserve_rng_state
+        ), torch.cuda.amp.autocast(**ctx.gpu_autocast_kwargs), torch.cpu.amp.autocast(**ctx.cpu_autocast_kwargs):
             g3_up = g3_right
             g3_left = g3_up * alpha3  ##shortcut
             set_device_states(ctx.cpu_states_3, ctx.gpu_devices, ctx.gpu_states_3)
@@ -324,10 +321,14 @@ class Fusion(nn.Module):
 
         self.level = level
         self.first_col = first_col
-        self.down = nn.Sequential(
-            nn.Conv2d(channels[level - 1], channels[level], kernel_size=2, stride=2),
-            LayerNorm(channels[level], eps=1e-6, data_format="channels_first"),
-        ) if level in [1, 2, 3] else nn.Identity()
+        self.down = (
+            nn.Sequential(
+                nn.Conv2d(channels[level - 1], channels[level], kernel_size=2, stride=2),
+                LayerNorm(channels[level], eps=1e-6, data_format="channels_first"),
+            )
+            if level in [1, 2, 3]
+            else nn.Identity()
+        )
         if not first_col:
             self.up = UpSampleConvnext(1, channels[level + 1], channels[level]) if level in [0, 1, 2] else nn.Identity()
 
@@ -352,9 +353,17 @@ class Level(nn.Module):
         countlayer = sum(layers[:level])
         expansion = 4
         self.fusion = Fusion(level, channels, first_col)
-        modules = [ConvNextBlock(channels[level], expansion * channels[level], channels[level], kernel_size=kernel_size,
-                                 layer_scale_init_value=1e-6, drop_path=dp_rate[countlayer + i]) for i in
-                   range(layers[level])]
+        modules = [
+            ConvNextBlock(
+                channels[level],
+                expansion * channels[level],
+                channels[level],
+                kernel_size=kernel_size,
+                layer_scale_init_value=1e-6,
+                drop_path=dp_rate[countlayer + i],
+            )
+            for i in range(layers[level])
+        ]
         self.blocks = nn.Sequential(*modules)
 
     def forward(self, *args):
@@ -368,14 +377,26 @@ class SubNet(nn.Module):
         super().__init__()
         shortcut_scale_init_value = 0.5
         self.save_memory = save_memory
-        self.alpha0 = nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[0], 1, 1)),
-                                   requires_grad=True) if shortcut_scale_init_value > 0 else None
-        self.alpha1 = nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[1], 1, 1)),
-                                   requires_grad=True) if shortcut_scale_init_value > 0 else None
-        self.alpha2 = nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[2], 1, 1)),
-                                   requires_grad=True) if shortcut_scale_init_value > 0 else None
-        self.alpha3 = nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[3], 1, 1)),
-                                   requires_grad=True) if shortcut_scale_init_value > 0 else None
+        self.alpha0 = (
+            nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[0], 1, 1)), requires_grad=True)
+            if shortcut_scale_init_value > 0
+            else None
+        )
+        self.alpha1 = (
+            nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[1], 1, 1)), requires_grad=True)
+            if shortcut_scale_init_value > 0
+            else None
+        )
+        self.alpha2 = (
+            nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[2], 1, 1)), requires_grad=True)
+            if shortcut_scale_init_value > 0
+            else None
+        )
+        self.alpha3 = (
+            nn.Parameter(shortcut_scale_init_value * torch.ones((1, channels[3], 1, 1)), requires_grad=True)
+            if shortcut_scale_init_value > 0
+            else None
+        )
 
         self.level0 = Level(0, channels, layers, kernel_size, first_col, dp_rates)
 
@@ -398,8 +419,7 @@ class SubNet(nn.Module):
 
         local_funs = [self.level0, self.level1, self.level2, self.level3]
         alpha = [self.alpha0, self.alpha1, self.alpha2, self.alpha3]
-        _, c0, c1, c2, c3 = ReverseFunction.apply(
-            local_funs, alpha, *args)
+        _, c0, c1, c2, c3 = ReverseFunction.apply(local_funs, alpha, *args)
 
         return c0, c1, c2, c3
 
@@ -440,8 +460,16 @@ class Classifier(nn.Module):
 
 
 class FullNet(nn.Module):
-    def __init__(self, channels=[32, 64, 96, 128], layers=[2, 3, 6, 3], num_subnet=5, kernel_size=3, drop_path=0.0,
-                 save_memory=True, inter_supv=True) -> None:
+    def __init__(
+        self,
+        channels=[32, 64, 96, 128],
+        layers=[2, 3, 6, 3],
+        num_subnet=5,
+        kernel_size=3,
+        drop_path=0.0,
+        save_memory=True,
+        inter_supv=True,
+    ) -> None:
         super().__init__()
         self.num_subnet = num_subnet
         self.inter_supv = inter_supv
@@ -450,14 +478,16 @@ class FullNet(nn.Module):
 
         self.stem = nn.Sequential(
             nn.Conv2d(3, channels[0], kernel_size=4, stride=4),
-            LayerNorm(channels[0], eps=1e-6, data_format="channels_first")
+            LayerNorm(channels[0], eps=1e-6, data_format="channels_first"),
         )
 
         dp_rate = [x.item() for x in torch.linspace(0, drop_path, sum(layers))]
         for i in range(num_subnet):
             first_col = True if i == 0 else False
-            self.add_module(f'subnet{str(i)}', SubNet(
-                channels, layers, kernel_size, first_col, dp_rates=dp_rate, save_memory=save_memory))
+            self.add_module(
+                f"subnet{i!s}",
+                SubNet(channels, layers, kernel_size, first_col, dp_rates=dp_rate, save_memory=save_memory),
+            )
 
         self.apply(self._init_weights)
         self.width_list = [i.size(1) for i in self.forward(torch.randn(1, 3, 640, 640))]
@@ -467,56 +497,88 @@ class FullNet(nn.Module):
         c0, c1, c2, c3 = 0, 0, 0, 0
         x = self.stem(x)
         for i in range(self.num_subnet):
-            c0, c1, c2, c3 = getattr(self, f'subnet{str(i)}')(x, c0, c1, c2, c3)
+            c0, c1, c2, c3 = getattr(self, f"subnet{i!s}")(x, c0, c1, c2, c3)
         return [c0, c1, c2, c3]
 
     def _init_weights(self, module):
         if isinstance(module, nn.Conv2d):
-            trunc_normal_(module.weight, std=.02)
+            trunc_normal_(module.weight, std=0.02)
             nn.init.constant_(module.bias, 0)
         elif isinstance(module, nn.Linear):
-            trunc_normal_(module.weight, std=.02)
+            trunc_normal_(module.weight, std=0.02)
             nn.init.constant_(module.bias, 0)
 
 
 ##-------------------------------------- Tiny -----------------------------------------
 
+
 def revcol_tiny(save_memory=True, inter_supv=True, drop_path=0.1, kernel_size=3):
     channels = [64, 128, 256, 512]
     layers = [2, 2, 4, 2]
     num_subnet = 4
-    return FullNet(channels, layers, num_subnet, drop_path=drop_path, save_memory=save_memory, inter_supv=inter_supv,
-                   kernel_size=kernel_size)
+    return FullNet(
+        channels,
+        layers,
+        num_subnet,
+        drop_path=drop_path,
+        save_memory=save_memory,
+        inter_supv=inter_supv,
+        kernel_size=kernel_size,
+    )
 
 
 ##-------------------------------------- Small -----------------------------------------
+
 
 def revcol_small(save_memory=True, inter_supv=True, drop_path=0.3, kernel_size=3):
     channels = [64, 128, 256, 512]
     layers = [2, 2, 4, 2]
     num_subnet = 8
-    return FullNet(channels, layers, num_subnet, drop_path=drop_path, save_memory=save_memory, inter_supv=inter_supv,
-                   kernel_size=kernel_size)
+    return FullNet(
+        channels,
+        layers,
+        num_subnet,
+        drop_path=drop_path,
+        save_memory=save_memory,
+        inter_supv=inter_supv,
+        kernel_size=kernel_size,
+    )
 
 
 ##-------------------------------------- Base -----------------------------------------
+
 
 def revcol_base(save_memory=True, inter_supv=True, drop_path=0.4, kernel_size=3, head_init_scale=None):
     channels = [72, 144, 288, 576]
     layers = [1, 1, 3, 2]
     num_subnet = 16
-    return FullNet(channels, layers, num_subnet, drop_path=drop_path, save_memory=save_memory, inter_supv=inter_supv,
-                   kernel_size=kernel_size)
+    return FullNet(
+        channels,
+        layers,
+        num_subnet,
+        drop_path=drop_path,
+        save_memory=save_memory,
+        inter_supv=inter_supv,
+        kernel_size=kernel_size,
+    )
 
 
 ##-------------------------------------- Large -----------------------------------------
+
 
 def revcol_large(save_memory=True, inter_supv=True, drop_path=0.5, kernel_size=3, head_init_scale=None):
     channels = [128, 256, 512, 1024]
     layers = [1, 2, 6, 2]
     num_subnet = 8
-    return FullNet(channels, layers, num_subnet, drop_path=drop_path, save_memory=save_memory, inter_supv=inter_supv,
-                   kernel_size=kernel_size)
+    return FullNet(
+        channels,
+        layers,
+        num_subnet,
+        drop_path=drop_path,
+        save_memory=save_memory,
+        inter_supv=inter_supv,
+        kernel_size=kernel_size,
+    )
 
 
 ##--------------------------------------Extra-Large -----------------------------------------
@@ -524,8 +586,16 @@ def revcol_xlarge(save_memory=True, inter_supv=True, drop_path=0.5, kernel_size=
     channels = [224, 448, 896, 1792]
     layers = [1, 2, 6, 2]
     num_subnet = 8
-    return FullNet(channels, layers, num_subnet, drop_path=drop_path, save_memory=save_memory, inter_supv=inter_supv,
-                   kernel_size=kernel_size)
+    return FullNet(
+        channels,
+        layers,
+        num_subnet,
+        drop_path=drop_path,
+        save_memory=save_memory,
+        inter_supv=inter_supv,
+        kernel_size=kernel_size,
+    )
+
 
 # model = revcol_xlarge(True)
 # # 示例输入
