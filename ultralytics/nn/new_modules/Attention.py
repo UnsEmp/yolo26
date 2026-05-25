@@ -1,23 +1,22 @@
 #!/usr/bin/env python
-# -*- coding:utf-8 -*-
 # @FileName  :Attention.py
 # @Time      :2024/5/21 15:54
 # @Author    :Bangyan
 
 import torch
 from torch import nn
-from torch.nn.parameter import Parameter
 
 
 class ECA(nn.Module):
     """Constructs a ECA module.
+
     Args:
         channel: Number of channels of the input feature map
-        k_size: Adaptive selection of kernel size
+        k_size: Adaptive selection of kernel size.
     """
 
     def __init__(self, channel, k_size=3):
-        super(ECA, self).__init__()
+        super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.conv = nn.Conv1d(1, 1, kernel_size=k_size, padding=(k_size - 1) // 2, bias=False)
         self.sigmoid = nn.Sigmoid()
@@ -33,6 +32,7 @@ class ECA(nn.Module):
         y = self.sigmoid(y)
 
         return x * y.expand_as(x)
+
 
 # class ECA(nn.Module):
 #     """Constructs an ECA module.
@@ -111,9 +111,9 @@ class CBAM(nn.Module):
         return self.spatial_attention(self.channel_attention(x))
 
 
-'''
+"""
 https://arxiv.org/abs/2112.05561
-'''
+"""
 
 
 class GAM(nn.Module):
@@ -128,9 +128,9 @@ class GAM(nn.Module):
         self.relu = nn.ReLU(inplace=True)
         self.linear2 = nn.Linear(inchannel_rate, in_channels)
 
-        self.conv1 = nn.Conv2d(in_channels, inchannel_rate, kernel_size=7, padding=3, padding_mode='replicate')
+        self.conv1 = nn.Conv2d(in_channels, inchannel_rate, kernel_size=7, padding=3, padding_mode="replicate")
 
-        self.conv2 = nn.Conv2d(inchannel_rate, out_channels, kernel_size=7, padding=3, padding_mode='replicate')
+        self.conv2 = nn.Conv2d(inchannel_rate, out_channels, kernel_size=7, padding=3, padding_mode="replicate")
 
         self.norm1 = nn.BatchNorm2d(inchannel_rate)
         self.norm2 = nn.BatchNorm2d(out_channels)
@@ -155,6 +155,3 @@ class GAM(nn.Module):
         out = x * x_spatial_att
 
         return out
-
-
-

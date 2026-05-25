@@ -1,26 +1,27 @@
+import math
+import numbers
+
+import numpy as np
 import torch
 import torch.nn as nn
 import torch.nn.functional as F
-from torchvision.ops.deform_conv import DeformConv2d
-import numbers
-import math
 from einops import rearrange
-import numpy as np
+from torchvision.ops.deform_conv import DeformConv2d
 
-
-__all__ = ['MB_TaylorFormer']
+__all__ = ["MB_TaylorFormer"]
 
 freqs_dict = dict()
 
 
 ##########################################################################
 
+
 def to_3d(x):
-    return rearrange(x, 'b c h w -> b (h w) c')
+    return rearrange(x, "b c h w -> b (h w) c")
 
 
 def to_4d(x, h, w):
-    return rearrange(x, 'b (h w) c -> b c h w', h=h, w=w)
+    return rearrange(x, "b (h w) c -> b c h w", h=h, w=w)
 
 
 class BiasFree_LayerNorm(nn.Module):
@@ -62,7 +63,7 @@ class WithBias_LayerNorm(nn.Module):
 class LayerNorm(nn.Module):
     def __init__(self, dim, LayerNorm_type):
         super().__init__()
-        if LayerNorm_type == 'BiasFree':
+        if LayerNorm_type == "BiasFree":
             self.body = BiasFree_LayerNorm(dim)
         else:
             self.body = WithBias_LayerNorm(dim)
@@ -82,8 +83,15 @@ class FeedForward(nn.Module):
 
         self.project_in = nn.Conv2d(dim, hidden_features * 2, kernel_size=1, bias=bias)
 
-        self.dwconv = nn.Conv2d(hidden_features * 2, hidden_features * 2, kernel_size=3, stride=1, padding=1,
-                                groups=hidden_features * 2, bias=bias)
+        self.dwconv = nn.Conv2d(
+            hidden_features * 2,
+            hidden_features * 2,
+            kernel_size=3,
+            stride=1,
+            padding=1,
+            groups=hidden_features * 2,
+            bias=bias,
+        )
 
         self.project_out = nn.Conv2d(hidden_features, dim, kernel_size=1, bias=bias)
 
@@ -109,15 +117,13 @@ class refine_att(nn.Module):
         elif isinstance(window, dict):
             self.window = window
         else:
-
             raise ValueError()
 
         self.conv_list = nn.ModuleList()
         self.head_splits = []
         for cur_window, cur_head_split in window.items():
             dilation = 1  # Use dilation=1 at default.
-            padding_size = (cur_window + (cur_window - 1) *
-                            (dilation - 1)) // 2
+            padding_size = (cur_window + (cur_window - 1) * (dilation - 1)) // 2
             cur_conv = nn.Conv2d(
                 cur_head_split * Ch * 2,
                 cur_head_split,
@@ -132,14 +138,13 @@ class refine_att(nn.Module):
         self.channel_splits = [x * Ch * 2 for x in self.head_splits]
 
     def forward(self, q, k, v, size):
-        """foward function"""
-        B, h, N, Ch = q.shape
+        """Forward function."""
+        _B, h, _N, _Ch = q.shape
         H, W = size
 
         # We don't use CLS_TOKEN
         q_img = q
         k_img = k
-        v_img = v
 
         # Shape: [B, h, H*W, Ch] -> [B, h*Ch, H, W].
         q_img = rearrange(q_img, "B h (H W) Ch -> B h Ch H W", H=H, W=W)
@@ -148,9 +153,7 @@ class refine_att(nn.Module):
         qk_concat = rearrange(qk_concat, "B h Ch H W -> B (h Ch) H W", H=H, W=W)
         # Split according to channels.
         qk_concat_list = torch.split(qk_concat, self.channel_splits, dim=1)
-        qk_att_list = [
-            conv(x) for conv, x in zip(self.conv_list, qk_concat_list)
-        ]
+        qk_att_list = [conv(x) for conv, x in zip(self.conv_list, qk_concat_list)]
 
         qk_att = torch.cat(qk_att_list, dim=1)
         # Shape: [B, h*Ch, H, W] -> [B, h, H*W, Ch].
@@ -173,11 +176,7 @@ class Attention(nn.Module):
         self.qkv_dwconv = nn.Conv2d(dim * 3, dim * 3, kernel_size=3, stride=1, padding=1, groups=dim * 3, bias=bias)
         self.project_out = nn.Conv2d(dim, dim, kernel_size=1, bias=bias)
         if num_heads == 8:
-            crpe_window = {
-                3: 2,
-                5: 3,
-                7: 3
-            }
+            crpe_window = {3: 2, 5: 3, 7: 3}
         elif num_heads == 1:
             crpe_window = {
                 3: 1,
@@ -191,19 +190,17 @@ class Attention(nn.Module):
                 3: 2,
                 5: 2,
             }
-        self.refine_att = refine_att(Ch=dim // num_heads,
-                                     h=num_heads,
-                                     window=crpe_window)
+        self.refine_att = refine_att(Ch=dim // num_heads, h=num_heads, window=crpe_window)
 
     def forward(self, x):
-        b, c, h, w = x.shape
+        _b, c, h, w = x.shape
 
         qkv = self.qkv_dwconv(self.qkv(x))
         q, k, v = qkv.chunk(3, dim=1)
 
-        q = rearrange(q, 'b (head c) h w -> b head (h w) c', head=self.num_heads)
-        k = rearrange(k, 'b (head c) h w -> b head c (h w)', head=self.num_heads)
-        v = rearrange(v, 'b (head c) h w -> b head (h w) c', head=self.num_heads)
+        q = rearrange(q, "b (head c) h w -> b head (h w) c", head=self.num_heads)
+        k = rearrange(k, "b (head c) h w -> b head c (h w)", head=self.num_heads)
+        v = rearrange(v, "b (head c) h w -> b head (h w) c", head=self.num_heads)
 
         # q = torch.nn.functional.normalize(q, dim=-1)
         q_norm = torch.norm(q, p=2, dim=-1, keepdim=True) / self.norm + 1e-6
@@ -220,13 +217,16 @@ class Attention(nn.Module):
 
         # print(torch.sum(k, dim=-1).unsqueeze(3).shape)
         out_numerator = torch.sum(v, dim=-2).unsqueeze(2) + (q @ attn)
-        out_denominator = torch.full((h * w, c // self.num_heads), h * w).to(q.device) \
-                          + q @ torch.sum(k, dim=-1).unsqueeze(3).repeat(1, 1, 1, c // self.num_heads) + 1e-6
+        out_denominator = (
+            torch.full((h * w, c // self.num_heads), h * w).to(q.device)
+            + q @ torch.sum(k, dim=-1).unsqueeze(3).repeat(1, 1, 1, c // self.num_heads)
+            + 1e-6
+        )
 
         # out=torch.div(out_numerator,out_denominator)*self.temperature*refine_weight
         out = torch.div(out_numerator, out_denominator) * self.temperature
         out = out * refine_weight
-        out = rearrange(out, 'b head (h w) c-> b (head c) h w', head=self.num_heads, h=h, w=w)
+        out = rearrange(out, "b head (h w) c-> b (head c) h w", head=self.num_heads, h=h, w=w)
 
         out = self.project_out(out)
         return out
@@ -250,35 +250,38 @@ class TransformerBlock(nn.Module):
 
 
 class MHCAEncoder(nn.Module):
-    """Multi-Head Convolutional self-Attention Encoder comprised of `MHCA`
-    blocks."""
+    """Multi-Head Convolutional self-Attention Encoder comprised of `MHCA` blocks.
+    """
 
     def __init__(
-            self,
-            dim,
-            num_layers=1,
-            num_heads=8,
-            ffn_expansion_factor=2.66,
-            bias=False,
-            LayerNorm_type='BiasFree',
-            qk_norm=1
+        self,
+        dim,
+        num_layers=1,
+        num_heads=8,
+        ffn_expansion_factor=2.66,
+        bias=False,
+        LayerNorm_type="BiasFree",
+        qk_norm=1,
     ):
         super().__init__()
 
         self.num_layers = num_layers
-        self.MHCA_layers = nn.ModuleList([
-            TransformerBlock(
-                dim,
-                num_heads=num_heads,
-                ffn_expansion_factor=ffn_expansion_factor,
-                bias=bias,
-                LayerNorm_type=LayerNorm_type,
-                qk_norm=qk_norm
-            ) for idx in range(self.num_layers)
-        ])
+        self.MHCA_layers = nn.ModuleList(
+            [
+                TransformerBlock(
+                    dim,
+                    num_heads=num_heads,
+                    ffn_expansion_factor=ffn_expansion_factor,
+                    bias=bias,
+                    LayerNorm_type=LayerNorm_type,
+                    qk_norm=qk_norm,
+                )
+                for idx in range(self.num_layers)
+            ]
+        )
 
     def forward(self, x, size):
-        """foward function"""
+        """Forward function."""
         H, W = size
         B = x.shape[0]
 
@@ -295,21 +298,19 @@ class ResBlock(nn.Module):
     """Residual block for convolutional local feature."""
 
     def __init__(
-            self,
-            in_features,
-            hidden_features=None,
-            out_features=None,
-            act_layer=nn.Hardswish,
-            norm_layer=nn.BatchNorm2d,
+        self,
+        in_features,
+        hidden_features=None,
+        out_features=None,
+        act_layer=nn.Hardswish,
+        norm_layer=nn.BatchNorm2d,
     ):
         super().__init__()
 
         out_features = out_features or in_features
         hidden_features = hidden_features or in_features
         # self.act0 = act_layer()
-        self.conv1 = Conv2d_BN(in_features,
-                               hidden_features,
-                               act_layer=act_layer)
+        self.conv1 = Conv2d_BN(in_features, hidden_features, act_layer=act_layer)
         self.dwconv = nn.Conv2d(
             hidden_features,
             hidden_features,
@@ -325,9 +326,7 @@ class ResBlock(nn.Module):
         self.apply(self._init_weights)
 
     def _init_weights(self, m):
-        """
-        initialization
-        """
+        """Initialization."""
         if isinstance(m, nn.Conv2d):
             fan_out = m.kernel_size[0] * m.kernel_size[1] * m.out_channels
             fan_out //= m.groups
@@ -336,7 +335,7 @@ class ResBlock(nn.Module):
                 m.bias.data.zero_()
 
     def forward(self, x):
-        """foward function"""
+        """Forward function."""
         identity = x
         # x=self.act0(x)
         feat = self.conv1(x)
@@ -349,36 +348,37 @@ class ResBlock(nn.Module):
 
 
 class MHCA_stage(nn.Module):
-    """Multi-Head Convolutional self-Attention stage comprised of `MHCAEncoder`
-    layers."""
+    """Multi-Head Convolutional self-Attention stage comprised of `MHCAEncoder` layers.
+    """
 
     def __init__(
-            self,
-            embed_dim,
-            out_embed_dim,
-            num_layers=1,
-            num_heads=8,
-            ffn_expansion_factor=2.66,
-            num_path=4,
-            bias=False,
-            LayerNorm_type='BiasFree',
-            qk_norm=1
-
+        self,
+        embed_dim,
+        out_embed_dim,
+        num_layers=1,
+        num_heads=8,
+        ffn_expansion_factor=2.66,
+        num_path=4,
+        bias=False,
+        LayerNorm_type="BiasFree",
+        qk_norm=1,
     ):
         super().__init__()
 
-        self.mhca_blks = nn.ModuleList([
-            MHCAEncoder(
-                embed_dim,
-                num_layers,
-                num_heads,
-                ffn_expansion_factor=ffn_expansion_factor,
-                bias=bias,
-                LayerNorm_type=LayerNorm_type,
-                qk_norm=qk_norm
-
-            ) for _ in range(num_path)
-        ])
+        self.mhca_blks = nn.ModuleList(
+            [
+                MHCAEncoder(
+                    embed_dim,
+                    num_layers,
+                    num_heads,
+                    ffn_expansion_factor=ffn_expansion_factor,
+                    bias=bias,
+                    LayerNorm_type=LayerNorm_type,
+                    qk_norm=qk_norm,
+                )
+                for _ in range(num_path)
+            ]
+        )
 
         self.aggregate = SKFF(embed_dim, height=num_path)
 
@@ -389,7 +389,7 @@ class MHCA_stage(nn.Module):
     #                           act_layer=nn.Hardswish)
 
     def forward(self, inputs):
-        """foward function"""
+        """Forward function."""
         # att_outputs = [self.InvRes(inputs[0])]
         att_outputs = []
 
@@ -408,30 +408,22 @@ class MHCA_stage(nn.Module):
 ##########################################################################
 ## Overlapped image patch embedding with 3x3 Conv
 class Conv2d_BN(nn.Module):
-
     def __init__(
-            self,
-            in_ch,
-            out_ch,
-            kernel_size=1,
-            stride=1,
-            pad=0,
-            dilation=1,
-            groups=1,
-            bn_weight_init=1,
-            norm_layer=nn.BatchNorm2d,
-            act_layer=None,
+        self,
+        in_ch,
+        out_ch,
+        kernel_size=1,
+        stride=1,
+        pad=0,
+        dilation=1,
+        groups=1,
+        bn_weight_init=1,
+        norm_layer=nn.BatchNorm2d,
+        act_layer=None,
     ):
         super().__init__()
 
-        self.conv = torch.nn.Conv2d(in_ch,
-                                    out_ch,
-                                    kernel_size,
-                                    stride,
-                                    pad,
-                                    dilation,
-                                    groups,
-                                    bias=False)
+        self.conv = torch.nn.Conv2d(in_ch, out_ch, kernel_size, stride, pad, dilation, groups, bias=False)
         # self.bn = norm_layer(out_ch)
 
         # torch.nn.init.constant_(self.bn.weight, bn_weight_init)
@@ -493,17 +485,16 @@ class SKFF(nn.Module):
 
 
 class DWConv2d_BN(nn.Module):
-
     def __init__(
-            self,
-            in_ch,
-            out_ch,
-            kernel_size=1,
-            stride=1,
-            norm_layer=nn.BatchNorm2d,
-            act_layer=nn.Hardswish,
-            bn_weight_init=1,
-            offset_clamp=(-1, 1)
+        self,
+        in_ch,
+        out_ch,
+        kernel_size=1,
+        stride=1,
+        norm_layer=nn.BatchNorm2d,
+        act_layer=nn.Hardswish,
+        bn_weight_init=1,
+        offset_clamp=(-1, 1),
     ):
         super().__init__()
         # dw
@@ -515,21 +506,14 @@ class DWConv2d_BN(nn.Module):
         #                                                 stride=1, padding=0, bias=False)
         #                                      )
         self.offset_clamp = offset_clamp
-        self.offset_generator = nn.Sequential(nn.Conv2d(in_channels=in_ch, out_channels=in_ch, kernel_size=3,
-                                                        stride=1, padding=1, bias=False, groups=in_ch),
-                                              nn.Conv2d(in_channels=in_ch, out_channels=18,
-                                                        kernel_size=1,
-                                                        stride=1, padding=0, bias=False)
-
-                                              )
+        self.offset_generator = nn.Sequential(
+            nn.Conv2d(
+                in_channels=in_ch, out_channels=in_ch, kernel_size=3, stride=1, padding=1, bias=False, groups=in_ch
+            ),
+            nn.Conv2d(in_channels=in_ch, out_channels=18, kernel_size=1, stride=1, padding=0, bias=False),
+        )
         self.dcn = DeformConv2d(
-            in_channels=in_ch,
-            out_channels=in_ch,
-            kernel_size=3,
-            stride=1,
-            padding=1,
-            bias=False,
-            groups=in_ch
+            in_channels=in_ch, out_channels=in_ch, kernel_size=3, stride=1, padding=1, bias=False, groups=in_ch
         )  # .cuda(7)
         self.pwconv = nn.Conv2d(in_ch, out_ch, 1, 1, 0, bias=False)
 
@@ -572,26 +556,16 @@ class DWConv2d_BN(nn.Module):
 
 
 class DWCPatchEmbed(nn.Module):
-    """Depthwise Convolutional Patch Embedding layer Image to Patch
-    Embedding."""
+    """Depthwise Convolutional Patch Embedding layer Image to Patch Embedding.
+    """
 
-    def __init__(self,
-                 in_chans=3,
-                 embed_dim=768,
-                 patch_size=16,
-                 stride=1,
-                 idx=0,
-                 act_layer=nn.Hardswish,
-                 offset_clamp=(-1, 1)):
+    def __init__(
+        self, in_chans=3, embed_dim=768, patch_size=16, stride=1, idx=0, act_layer=nn.Hardswish, offset_clamp=(-1, 1)
+    ):
         super().__init__()
 
         self.patch_conv = DWConv2d_BN(
-            in_chans,
-            embed_dim,
-            kernel_size=patch_size,
-            stride=stride,
-            act_layer=act_layer,
-            offset_clamp=offset_clamp
+            in_chans, embed_dim, kernel_size=patch_size, stride=stride, act_layer=act_layer, offset_clamp=offset_clamp
         )
         """
         self.patch_conv = DWConv2d_BN(
@@ -604,32 +578,35 @@ class DWCPatchEmbed(nn.Module):
         """
 
     def forward(self, x):
-        """foward function"""
+        """Forward function."""
         x = self.patch_conv(x)
 
         return x
 
 
 class Patch_Embed_stage(nn.Module):
-    """Depthwise Convolutional Patch Embedding stage comprised of
-    `DWCPatchEmbed` layers."""
+    """Depthwise Convolutional Patch Embedding stage comprised of `DWCPatchEmbed` layers.
+    """
 
     def __init__(self, in_chans, embed_dim, num_path=4, isPool=False, offset_clamp=(-1, 1)):
         super().__init__()
 
-        self.patch_embeds = nn.ModuleList([
-            DWCPatchEmbed(
-                in_chans=in_chans if idx == 0 else embed_dim,
-                embed_dim=embed_dim,
-                patch_size=3,
-                stride=1,
-                idx=idx,
-                offset_clamp=offset_clamp
-            ) for idx in range(num_path)
-        ])
+        self.patch_embeds = nn.ModuleList(
+            [
+                DWCPatchEmbed(
+                    in_chans=in_chans if idx == 0 else embed_dim,
+                    embed_dim=embed_dim,
+                    patch_size=3,
+                    stride=1,
+                    idx=idx,
+                    offset_clamp=offset_clamp,
+                )
+                for idx in range(num_path)
+            ]
+        )
 
     def forward(self, x):
-        """foward function"""
+        """Forward function."""
         att_inputs = []
         for pe in self.patch_embeds:
             x = pe(x)
@@ -665,12 +642,21 @@ class Downsample(nn.Module):
 
         self.body = nn.Sequential(  # nn.Conv2d(n_feat, n_feat // 2, kernel_size=3, stride=1, padding=1, bias=False),
             # dw
-            nn.Conv2d(input_feat, input_feat, kernel_size=3, stride=1, padding=1, groups=input_feat, bias=False, ),
+            nn.Conv2d(
+                input_feat,
+                input_feat,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                groups=input_feat,
+                bias=False,
+            ),
             # pw-linear
             nn.Conv2d(input_feat, out_feat // 4, 1, 1, 0, bias=False),
             # nn.BatchNorm2d(n_feat // 2),
             # nn.Hardswish(),
-            nn.PixelUnshuffle(2))
+            nn.PixelUnshuffle(2),
+        )
 
     def forward(self, x):
         return self.body(x)
@@ -682,12 +668,21 @@ class Upsample(nn.Module):
 
         self.body = nn.Sequential(  # nn.Conv2d(n_feat, n_feat*2, kernel_size=3, stride=1, padding=1, bias=False),
             # dw
-            nn.Conv2d(input_feat, input_feat, kernel_size=3, stride=1, padding=1, groups=input_feat, bias=False, ),
+            nn.Conv2d(
+                input_feat,
+                input_feat,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                groups=input_feat,
+                bias=False,
+            ),
             # pw-linear
             nn.Conv2d(input_feat, out_feat * 4, 1, 1, 0, bias=False),
             # nn.BatchNorm2d(n_feat*2),
             # nn.Hardswish(),
-            nn.PixelShuffle(2))
+            nn.PixelShuffle(2),
+        )
 
     def forward(self, x):
         return self.body(x)
@@ -696,50 +691,87 @@ class Upsample(nn.Module):
 ##########################################################################
 ##---------- Restormer -----------------------
 class MB_TaylorFormer(nn.Module):
-    def __init__(self,
-                 inp_channels=3,
-                 dim=[6, 12, 24, 36],
-                 num_blocks=[1, 1, 1, 1],
-                 heads=[1, 1, 1, 1],
-                 bias=False,
-                 dual_pixel_task=True,
-                 num_path=[1, 1, 1, 1],  ## True for dual-pixel defocus deblurring only. Also set inp_channels=6
-                 qk_norm=1,
-                 offset_clamp=(-1, 1)
-                 ):
+    def __init__(
+        self,
+        inp_channels=3,
+        dim=[6, 12, 24, 36],
+        num_blocks=[1, 1, 1, 1],
+        heads=[1, 1, 1, 1],
+        bias=False,
+        dual_pixel_task=True,
+        num_path=[1, 1, 1, 1],  ## True for dual-pixel defocus deblurring only. Also set inp_channels=6
+        qk_norm=1,
+        offset_clamp=(-1, 1),
+    ):
 
         super().__init__()
 
         self.patch_embed = OverlapPatchEmbed(inp_channels, dim[0])
-        self.patch_embed_encoder_level1 = Patch_Embed_stage(dim[0], dim[0], num_path=num_path[0], isPool=False,
-                                                            offset_clamp=offset_clamp)
-        self.encoder_level1 = MHCA_stage(dim[0], dim[0], num_layers=num_blocks[0], num_heads=heads[0],
-                                         ffn_expansion_factor=2.66, num_path=num_path[0],
-                                         bias=False, LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_encoder_level1 = Patch_Embed_stage(
+            dim[0], dim[0], num_path=num_path[0], isPool=False, offset_clamp=offset_clamp
+        )
+        self.encoder_level1 = MHCA_stage(
+            dim[0],
+            dim[0],
+            num_layers=num_blocks[0],
+            num_heads=heads[0],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[0],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
         self.down1_2 = Downsample(dim[0], dim[1])  ## From Level 1 to Level 2
 
-        self.patch_embed_encoder_level2 = Patch_Embed_stage(dim[1], dim[1], num_path=num_path[1], isPool=False,
-                                                            offset_clamp=offset_clamp)
-        self.encoder_level2 = MHCA_stage(dim[1], dim[1], num_layers=num_blocks[1], num_heads=heads[1],
-                                         ffn_expansion_factor=2.66,
-                                         num_path=num_path[1], bias=False, LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_encoder_level2 = Patch_Embed_stage(
+            dim[1], dim[1], num_path=num_path[1], isPool=False, offset_clamp=offset_clamp
+        )
+        self.encoder_level2 = MHCA_stage(
+            dim[1],
+            dim[1],
+            num_layers=num_blocks[1],
+            num_heads=heads[1],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[1],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
         self.down2_3 = Downsample(dim[1], dim[2])  ## From Level 2 to Level 3
 
-        self.patch_embed_encoder_level3 = Patch_Embed_stage(dim[2], dim[2], num_path=num_path[2],
-                                                            isPool=False, offset_clamp=offset_clamp)
-        self.encoder_level3 = MHCA_stage(dim[2], dim[2], num_layers=num_blocks[2], num_heads=heads[2],
-                                         ffn_expansion_factor=2.66,
-                                         num_path=num_path[2], bias=False, LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_encoder_level3 = Patch_Embed_stage(
+            dim[2], dim[2], num_path=num_path[2], isPool=False, offset_clamp=offset_clamp
+        )
+        self.encoder_level3 = MHCA_stage(
+            dim[2],
+            dim[2],
+            num_layers=num_blocks[2],
+            num_heads=heads[2],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[2],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
         self.down3_4 = Downsample(dim[2], dim[3])  ## From Level 3 to Level 4
 
-        self.patch_embed_latent = Patch_Embed_stage(dim[3], dim[3], num_path=num_path[3],
-                                                    isPool=False, offset_clamp=offset_clamp)
-        self.latent = MHCA_stage(dim[3], dim[3], num_layers=num_blocks[3], num_heads=heads[3],
-                                 ffn_expansion_factor=2.66, num_path=num_path[3], bias=False,
-                                 LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_latent = Patch_Embed_stage(
+            dim[3], dim[3], num_path=num_path[3], isPool=False, offset_clamp=offset_clamp
+        )
+        self.latent = MHCA_stage(
+            dim[3],
+            dim[3],
+            num_layers=num_blocks[3],
+            num_heads=heads[3],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[3],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
         self.up4_3 = Upsample(int(dim[3]), dim[2])  ## From Level 4 to Level 3
         self.reduce_chan_level3 = nn.Sequential(
@@ -748,11 +780,20 @@ class MB_TaylorFormer(nn.Module):
             # nn.Hardswish(),
         )
 
-        self.patch_embed_decoder_level3 = Patch_Embed_stage(dim[2], dim[2], num_path=num_path[2],
-                                                            isPool=False, offset_clamp=offset_clamp)
-        self.decoder_level3 = MHCA_stage(dim[2], dim[2], num_layers=num_blocks[2], num_heads=heads[2],
-                                         ffn_expansion_factor=2.66, num_path=num_path[2], bias=False,
-                                         LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_decoder_level3 = Patch_Embed_stage(
+            dim[2], dim[2], num_path=num_path[2], isPool=False, offset_clamp=offset_clamp
+        )
+        self.decoder_level3 = MHCA_stage(
+            dim[2],
+            dim[2],
+            num_layers=num_blocks[2],
+            num_heads=heads[2],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[2],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
         self.up3_2 = Upsample(int(dim[2]), dim[1])  ## From Level 3 to Level 2
         self.reduce_chan_level2 = nn.Sequential(
@@ -761,25 +802,52 @@ class MB_TaylorFormer(nn.Module):
             # nn.Hardswish(),
         )
 
-        self.patch_embed_decoder_level2 = Patch_Embed_stage(dim[1], dim[1], num_path=num_path[1],
-                                                            isPool=False, offset_clamp=offset_clamp)
-        self.decoder_level2 = MHCA_stage(dim[1], dim[1], num_layers=num_blocks[1], num_heads=heads[1],
-                                         ffn_expansion_factor=2.66, num_path=num_path[1], bias=False,
-                                         LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_decoder_level2 = Patch_Embed_stage(
+            dim[1], dim[1], num_path=num_path[1], isPool=False, offset_clamp=offset_clamp
+        )
+        self.decoder_level2 = MHCA_stage(
+            dim[1],
+            dim[1],
+            num_layers=num_blocks[1],
+            num_heads=heads[1],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[1],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
         self.up2_1 = Upsample(int(dim[1]), dim[0])  ## From Level 2 to Level 1  (NO 1x1 conv to reduce channels)
 
-        self.patch_embed_decoder_level1 = Patch_Embed_stage(dim[1], dim[1], num_path=num_path[0],
-                                                            isPool=False, offset_clamp=offset_clamp)
-        self.decoder_level1 = MHCA_stage(dim[1], dim[1], num_layers=num_blocks[0], num_heads=heads[0],
-                                         ffn_expansion_factor=2.66, num_path=num_path[0], bias=False,
-                                         LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_decoder_level1 = Patch_Embed_stage(
+            dim[1], dim[1], num_path=num_path[0], isPool=False, offset_clamp=offset_clamp
+        )
+        self.decoder_level1 = MHCA_stage(
+            dim[1],
+            dim[1],
+            num_layers=num_blocks[0],
+            num_heads=heads[0],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[0],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
-        self.patch_embed_refinement = Patch_Embed_stage(dim[1], dim[1], num_path=num_path[0],
-                                                        isPool=False, offset_clamp=offset_clamp)
-        self.refinement = MHCA_stage(dim[1], dim[1], num_layers=num_blocks[0], num_heads=heads[0],
-                                     ffn_expansion_factor=2.66, num_path=num_path[0], bias=False,
-                                     LayerNorm_type='BiasFree', qk_norm=qk_norm)
+        self.patch_embed_refinement = Patch_Embed_stage(
+            dim[1], dim[1], num_path=num_path[0], isPool=False, offset_clamp=offset_clamp
+        )
+        self.refinement = MHCA_stage(
+            dim[1],
+            dim[1],
+            num_layers=num_blocks[0],
+            num_heads=heads[0],
+            ffn_expansion_factor=2.66,
+            num_path=num_path[0],
+            bias=False,
+            LayerNorm_type="BiasFree",
+            qk_norm=qk_norm,
+        )
 
         #### For Dual-Pixel Defocus Deblurring Task ####
         self.dual_pixel_task = dual_pixel_task
@@ -792,8 +860,14 @@ class MB_TaylorFormer(nn.Module):
         self.output = nn.Sequential(  # nn.Conv2d(n_feat, n_feat*2, kernel_size=3, stride=1, padding=1, bias=False),
             # nn.BatchNorm2d(dim*2),
             # nn.Hardswish(),
-            nn.Conv2d(dim[1], 3, kernel_size=3, stride=1, padding=1, bias=False, ),
-
+            nn.Conv2d(
+                dim[1],
+                3,
+                kernel_size=3,
+                stride=1,
+                padding=1,
+                bias=False,
+            ),
         )
 
     def forward(self, inp_img):
@@ -866,8 +940,6 @@ def count_param(model):
 
 
 if __name__ == "__main__":
-    from thop import profile
-
     model = MB_TaylorFormer()
     model.eval()
     print("params", count_param(model))
