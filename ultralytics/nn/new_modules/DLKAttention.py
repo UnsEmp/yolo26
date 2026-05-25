@@ -1,29 +1,34 @@
-import torchvision
-import torch.nn as nn
 import torch
-__all__ = ['C2f_DLKA', 'deformable_LKA']
+import torch.nn as nn
+import torchvision
+
+__all__ = ["C2f_DLKA", "deformable_LKA"]
+
 
 class DeformConv(nn.Module):
-
     def __init__(self, in_channels, groups, kernel_size=(3, 3), padding=1, stride=1, dilation=1, bias=True):
-        super(DeformConv, self).__init__()
+        super().__init__()
 
-        self.offset_net = nn.Conv2d(in_channels=in_channels,
-                                    out_channels=2 * kernel_size[0] * kernel_size[1],
-                                    kernel_size=kernel_size,
-                                    padding=padding,
-                                    stride=stride,
-                                    dilation=dilation,
-                                    bias=True)
+        self.offset_net = nn.Conv2d(
+            in_channels=in_channels,
+            out_channels=2 * kernel_size[0] * kernel_size[1],
+            kernel_size=kernel_size,
+            padding=padding,
+            stride=stride,
+            dilation=dilation,
+            bias=True,
+        )
 
-        self.deform_conv = torchvision.ops.DeformConv2d(in_channels=in_channels,
-                                                        out_channels=in_channels,
-                                                        kernel_size=kernel_size,
-                                                        padding=padding,
-                                                        groups=groups,
-                                                        stride=stride,
-                                                        dilation=dilation,
-                                                        bias=False)
+        self.deform_conv = torchvision.ops.DeformConv2d(
+            in_channels=in_channels,
+            out_channels=in_channels,
+            kernel_size=kernel_size,
+            padding=padding,
+            groups=groups,
+            stride=stride,
+            dilation=dilation,
+            bias=False,
+        )
 
     def forward(self, x):
         offsets = self.offset_net(x)
@@ -45,6 +50,7 @@ class deformable_LKA(nn.Module):
         attn = self.conv1(attn)
         return u * attn
 
+
 def autopad(k, p=None, d=1):  # kernel, padding, dilation
     """Pad to 'same' shape outputs."""
     if d > 1:
@@ -56,6 +62,7 @@ def autopad(k, p=None, d=1):  # kernel, padding, dilation
 
 class Conv(nn.Module):
     """Standard convolution with args(ch_in, ch_out, kernel, stride, padding, groups, dilation, activation)."""
+
     default_act = nn.SiLU()  # default activation
 
     def __init__(self, c1, c2, k=1, s=1, p=None, g=1, d=1, act=True):
@@ -104,7 +111,8 @@ class C2f_DLKA(nn.Module):
         self.cv1 = Conv(c1, 2 * self.c, 1, 1)
         self.cv2 = Conv((2 + n) * self.c, c2, 1)  # optional act=FReLU(c2)
         self.m = nn.ModuleList(
-            Bottleneck_DLKA(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n))
+            Bottleneck_DLKA(self.c, self.c, shortcut, g, k=((3, 3), (3, 3)), e=1.0) for _ in range(n)
+        )
 
     def forward(self, x):
         """Forward pass through C2f layer."""
@@ -120,4 +128,3 @@ class C2f_DLKA(nn.Module):
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
-

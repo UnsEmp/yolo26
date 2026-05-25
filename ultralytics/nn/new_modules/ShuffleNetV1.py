@@ -11,27 +11,28 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 # ==============================================================================
-from typing import Any, List, Optional
+from typing import Any
 
 import torch
-from torch import Tensor
 from torch import nn
 
 __all__ = [
-    "shufflenet_v1_x0_5", "shufflenet_v1_x1_0", "shufflenet_v1_x1_5", "shufflenet_v1_x2_0",
+    "shufflenet_v1_x0_5",
+    "shufflenet_v1_x1_0",
+    "shufflenet_v1_x1_5",
+    "shufflenet_v1_x2_0",
 ]
 
 
 class ShuffleNetV1(nn.Module):
-
     def __init__(
-            self,
-            repeats_times: List[int],
-            stages_out_channels: List[int],
-            groups: int = 8,
-            num_classes: int = 1000,
+        self,
+        repeats_times: list[int],
+        stages_out_channels: list[int],
+        groups: int = 8,
+        num_classes: int = 1000,
     ) -> None:
-        super(ShuffleNetV1, self).__init__()
+        super().__init__()
         in_channels = stages_out_channels[0]
 
         self.first_conv = nn.Sequential(
@@ -88,7 +89,7 @@ class ShuffleNetV1(nn.Module):
     def _initialize_weights(self) -> None:
         for name, module in self.named_modules():
             if isinstance(module, nn.Conv2d):
-                if 'first' in name:
+                if "first" in name:
                     nn.init.normal_(module.weight, 0, 0.01)
                 else:
                     nn.init.normal_(module.weight, 0, 1.0 / module.weight.shape[1])
@@ -112,14 +113,14 @@ class ShuffleNetV1(nn.Module):
 
 class ShuffleNetV1Unit(nn.Module):
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: int,
-            stride: int,
-            groups: int,
-            first_groups: bool = False,
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int,
+        groups: int,
+        first_groups: bool = False,
     ) -> None:
-        super(ShuffleNetV1Unit, self).__init__()
+        super().__init__()
         self.stride = stride
         self.groups = groups
         self.first_groups = first_groups
@@ -131,13 +132,15 @@ class ShuffleNetV1Unit(nn.Module):
 
         self.branch_main_1 = nn.Sequential(
             # pw
-            nn.Conv2d(in_channels, hidden_channels, (1, 1), (1, 1), (0, 0), groups=1 if first_groups else groups,
-                      bias=False),
+            nn.Conv2d(
+                in_channels, hidden_channels, (1, 1), (1, 1), (0, 0), groups=1 if first_groups else groups, bias=False
+            ),
             nn.BatchNorm2d(hidden_channels),
             nn.ReLU(True),
             # dw
-            nn.Conv2d(hidden_channels, hidden_channels, (3, 3), (stride, stride), (1, 1), groups=hidden_channels,
-                      bias=False),
+            nn.Conv2d(
+                hidden_channels, hidden_channels, (3, 3), (stride, stride), (1, 1), groups=hidden_channels, bias=False
+            ),
             nn.BatchNorm2d(hidden_channels),
         )
         self.branch_main_2 = nn.Sequential(
