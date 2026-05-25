@@ -17,6 +17,26 @@ Examples:
     >>> subprocess.run(f"onnxslim {f} {f} && open {f}", shell=True, check=True)  # pip install onnxslim
 """
 
+from ..my_modules.A2C2fStar import A2C2fStar
+from ..my_modules.A2C2fStarFast import A2C2fStarFast
+from ..my_modules.C2PSA_ECA import C2PSA_ECA
+from ..my_modules.C3GhostStart import C3GhostStar
+from ..my_modules.C3k2Star import C3k2Star
+from ..my_modules.MSAC2PSA import MSAC2PSA
+from ..my_modules.SDA2C2f import SDA2C2f
+from ..my_modules.SGhostConv import SGhostConv
+from ..my_modules.SimSPPF import SimSPPF
+from ..my_modules.SPDSGhost import SPDSGhost
+from ..my_modules.SSGhostConv import SSGhostConv
+from ..new_modules.Attention import CBAM, ECA, GAM
+from ..new_modules.CGAttention import C2f_CGA
+from ..new_modules.DAttention import DAttentionBaseline
+from ..new_modules.DLKAttention import C2f_DLKA, deformable_LKA
+from ..new_modules.EMAttention import EMA
+from ..new_modules.FocusedLinearAttention import C2f_FLA
+from ..new_modules.HAttention import HAT
+from ..new_modules.LSKAttention import LSKA
+from ..new_modules.TripletAttention import C2f_TripletAt
 from .block import (
     C1,
     C2,
@@ -105,63 +125,27 @@ from .transformer import (
     TransformerEncoderLayer,
     TransformerLayer,
 )
-from ..my_modules.A2C2fStar import A2C2fStar
-from ..my_modules.A2C2fStarFast import A2C2fStarFast
-from ..my_modules.C3k2Star import C3k2Star
-from ..my_modules.SDA2C2f import SDA2C2f
-from ..my_modules.SGhostConv import SGhostConv
-from ..my_modules.SPDSGhost import SPDSGhost
-from ..my_modules.SSGhostConv import SSGhostConv
-from ..new_modules.EMAttention import EMA
-from ..my_modules.C3GhostStart import C3GhostStar
-from ..my_modules.C2PSA_ECA import C2PSA_ECA
-from ..my_modules.MSAC2PSA import MSAC2PSA
-from ..new_modules.Attention import ECA, CBAM, GAM
-from ..new_modules.DLKAttention import C2f_DLKA, deformable_LKA
-from ..new_modules.CGAttention import C2f_CGA
-from ..new_modules.DAttention import DAttentionBaseline
-from ..new_modules.FocusedLinearAttention import C2f_FLA
-from ..new_modules.HAttention import HAT
-from ..new_modules.LSKAttention import LSKA
-from ..new_modules.TripletAttention import C2f_TripletAt
-from ..my_modules.SimSPPF import SimSPPF
 
 __all__ = (
-    "ECA",
-    "CBAM",
-    "GAM",
-    "DLKAttention",
-    "MSAC2PSA",
-    "A2C2fStar",
-    "A2C2fStarFast",
-    "C3k2Star",
-    "SDA2C2f",
-    "SGhostConv",
-    "SSGhostConv",
-    "SPDSGhost",
-    "EMA",
-    "C3GhostStar",
-    "C2PSA_ECA",
-    "C2f_DLKA",
-    "deformable_LKA",
-    "C2f_CGA",
-    "DAttentionBaseline",
-    "C2f_FLA",
-    "HAT",
-    "LSKA",
-    "C2f_TripletAt",
-    "SimSPPF",
     "AIFI",
     "C1",
     "C2",
     "C2PSA",
+    "C2PSA_ECA",
     "C3",
     "C3TR",
     "CBAM",
+    "CBAM",
     "CIB",
     "DFL",
+    "ECA",
     "ELAN1",
+    "EMA",
+    "GAM",
+    "HAT",
+    "LSKA",
     "MLP",
+    "MSAC2PSA",
     "OBB",
     "OBB26",
     "PSA",
@@ -169,6 +153,8 @@ __all__ = (
     "SPPELAN",
     "SPPF",
     "A2C2f",
+    "A2C2fStar",
+    "A2C2fStarFast",
     "AConv",
     "ADown",
     "Attention",
@@ -179,8 +165,14 @@ __all__ = (
     "C2fAttn",
     "C2fCIB",
     "C2fPSA",
+    "C2f_CGA",
+    "C2f_DLKA",
+    "C2f_FLA",
+    "C2f_TripletAt",
     "C3Ghost",
+    "C3GhostStar",
     "C3k2",
+    "C3k2Star",
     "C3x",
     "CBFuse",
     "CBLinear",
@@ -191,6 +183,8 @@ __all__ = (
     "Conv",
     "Conv2",
     "ConvTranspose",
+    "DAttentionBaseline",
+    "DLKAttention",
     "DWConv",
     "DWConvTranspose2d",
     "DeformableTransformerDecoder",
@@ -219,8 +213,13 @@ __all__ = (
     "RepVGGDW",
     "ResNetLayer",
     "SCDown",
+    "SDA2C2f",
+    "SGhostConv",
+    "SPDSGhost",
+    "SSGhostConv",
     "Segment",
     "Segment26",
+    "SimSPPF",
     "SpatialAttention",
     "TorchVision",
     "TransformerBlock",
@@ -230,5 +229,6 @@ __all__ = (
     "YOLOEDetect",
     "YOLOESegment",
     "YOLOESegment26",
+    "deformable_LKA",
     "v10Detect",
 )

@@ -1,19 +1,14 @@
 from collections import OrderedDict
+
 import torch.nn as nn
 import torch.nn.functional as F
 
-__all__ = ['ConvNormLayer', 'Blocks']
+__all__ = ["Blocks", "ConvNormLayer"]
 
 
 class ConvNormLayer(nn.Module):
-    def __init__(self,
-                 ch_in,
-                 ch_out,
-                 filter_size,
-                 stride,
-                 groups=1,
-                 act=None):
-        super(ConvNormLayer, self).__init__()
+    def __init__(self, ch_in, ch_out, filter_size, stride, groups=1, act=None):
+        super().__init__()
         self.act = act
         self.conv = nn.Conv2d(
             in_channels=ch_in,
@@ -21,7 +16,8 @@ class ConvNormLayer(nn.Module):
             kernel_size=filter_size,
             stride=stride,
             padding=(filter_size - 1) // 2,
-            groups=groups)
+            groups=groups,
+        )
 
         self.norm = nn.BatchNorm2d(ch_out)
 
@@ -35,13 +31,13 @@ class ConvNormLayer(nn.Module):
 
 class SELayer(nn.Module):
     def __init__(self, ch, reduction_ratio=16):
-        super(SELayer, self).__init__()
+        super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(ch, ch // reduction_ratio, bias=False),
             nn.ReLU(inplace=True),
             nn.Linear(ch // reduction_ratio, ch, bias=False),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -54,50 +50,20 @@ class SELayer(nn.Module):
 class BasicBlock(nn.Module):
     expansion = 1
 
-    def __init__(self,
-                 ch_in,
-                 ch_out,
-                 stride,
-                 shortcut,
-                 act='relu',
-                 variant='b',
-                 att=False):
-        super(BasicBlock, self).__init__()
+    def __init__(self, ch_in, ch_out, stride, shortcut, act="relu", variant="b", att=False):
+        super().__init__()
         self.shortcut = shortcut
         if not shortcut:
-            if variant == 'd' and stride == 2:
+            if variant == "d" and stride == 2:
                 self.short = nn.Sequential()
-                self.short.add_sublayer(
-                    'pool',
-                    nn.AvgPool2d(
-                        kernel_size=2, stride=2, padding=0, ceil_mode=True))
-                self.short.add_sublayer(
-                    'conv',
-                    ConvNormLayer(
-                        ch_in=ch_in,
-                        ch_out=ch_out,
-                        filter_size=1,
-                        stride=1))
+                self.short.add_sublayer("pool", nn.AvgPool2d(kernel_size=2, stride=2, padding=0, ceil_mode=True))
+                self.short.add_sublayer("conv", ConvNormLayer(ch_in=ch_in, ch_out=ch_out, filter_size=1, stride=1))
             else:
-                self.short = ConvNormLayer(
-                    ch_in=ch_in,
-                    ch_out=ch_out,
-                    filter_size=1,
-                    stride=stride)
+                self.short = ConvNormLayer(ch_in=ch_in, ch_out=ch_out, filter_size=1, stride=stride)
 
-        self.branch2a = ConvNormLayer(
-            ch_in=ch_in,
-            ch_out=ch_out,
-            filter_size=3,
-            stride=stride,
-            act='relu')
+        self.branch2a = ConvNormLayer(ch_in=ch_in, ch_out=ch_out, filter_size=3, stride=stride, act="relu")
 
-        self.branch2b = ConvNormLayer(
-            ch_in=ch_out,
-            ch_out=ch_out,
-            filter_size=3,
-            stride=1,
-            act=None)
+        self.branch2b = ConvNormLayer(ch_in=ch_out, ch_out=ch_out, filter_size=3, stride=1, act=None)
 
         self.att = att
         if self.att:
@@ -124,10 +90,10 @@ class BasicBlock(nn.Module):
 class BottleNeck(nn.Module):
     expansion = 4
 
-    def __init__(self, ch_in, ch_out, stride, shortcut, act='relu', variant='d', att=False):
+    def __init__(self, ch_in, ch_out, stride, shortcut, act="relu", variant="d", att=False):
         super().__init__()
 
-        if variant == 'a':
+        if variant == "a":
             stride1, stride2 = stride, 1
         else:
             stride1, stride2 = 1, stride
@@ -140,11 +106,15 @@ class BottleNeck(nn.Module):
 
         self.shortcut = shortcut
         if not shortcut:
-            if variant == 'd' and stride == 2:
-                self.short = nn.Sequential(OrderedDict([
-                    ('pool', nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
-                    ('conv', ConvNormLayer(ch_in, ch_out * self.expansion, 1, 1))
-                ]))
+            if variant == "d" and stride == 2:
+                self.short = nn.Sequential(
+                    OrderedDict(
+                        [
+                            ("pool", nn.AvgPool2d(2, 2, 0, ceil_mode=True)),
+                            ("conv", ConvNormLayer(ch_in, ch_out * self.expansion, 1, 1)),
+                        ]
+                    )
+                )
             else:
                 self.short = ConvNormLayer(ch_in, ch_out * self.expansion, 1, stride)
 
@@ -172,15 +142,8 @@ class BottleNeck(nn.Module):
 
 
 class Blocks(nn.Module):
-    def __init__(self,
-                 ch_in,
-                 ch_out,
-                 count,
-                 block,
-                 stage_num,
-                 att=False,
-                 variant='b'):
-        super(Blocks, self).__init__()
+    def __init__(self, ch_in, ch_out, count, block, stage_num, att=False, variant="b"):
+        super().__init__()
         self.blocks = nn.ModuleList()
         block = globals()[block]
         for i in range(count):
@@ -191,7 +154,8 @@ class Blocks(nn.Module):
                     stride=2 if i == 0 and stage_num != 2 else 1,
                     shortcut=False if i == 0 else True,
                     variant=variant,
-                    att=att)
+                    att=att,
+                )
             )
             if i == 0:
                 ch_in = ch_out * block.expansion
