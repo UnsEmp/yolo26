@@ -1,29 +1,32 @@
 """A from-scratch implementation of original MobileNet paper ( for educational purposes ).
 Paper
     MobileNets: Efficient Convolutional Neural Networks for Mobile Vision Applications - https://arxiv.org/abs/1704.04861
-author : shubham.aiengineer@gmail.com
+author : shubham.aiengineer@gmail.com.
 """
+
 import torch
 from torch import nn
 
-__all__ = ['MobileNetV1']
+__all__ = ["MobileNetV1"]
+
 
 class DepthwiseSepConvBlock(nn.Module):
     def __init__(
-            self,
-            in_channels: int,
-            out_channels: int,
-            stride: int = 1,
-            use_relu6: bool = True,
+        self,
+        in_channels: int,
+        out_channels: int,
+        stride: int = 1,
+        use_relu6: bool = True,
     ):
-        """Constructs Depthwise seperable with pointwise convolution with relu and batchnorm respectively.
+        """Constructs Depthwise separable with pointwise convolution with relu and batchnorm respectively.
+
         Args:
             in_channels (int): input channels for depthwise convolution
             out_channels (int): output channels for pointwise convolution
-            stride (int, optional): stride paramemeter for depthwise convolution. Defaults to 1.
-            use_relu6 (bool, optional): whether to use standard ReLU or ReLU6 for depthwise separable convolution block. Defaults to True.
+            stride (int, optional): stride parameter for depthwise convolution. Defaults to 1.
+            use_relu6 (bool, optional): whether to use standard ReLU or ReLU6 for depthwise separable convolution block.
+                Defaults to True.
         """
-
         super().__init__()
 
         # Depthwise conv
@@ -47,7 +50,6 @@ class DepthwiseSepConvBlock(nn.Module):
 
     def forward(self, x):
         """Perform forward pass."""
-
         x = self.depthwise_conv(x)
         x = self.bn1(x)
         x = self.relu1(x)
@@ -60,19 +62,21 @@ class DepthwiseSepConvBlock(nn.Module):
 
 class MobileNetV1(nn.Module):
     def __init__(
-            self,
-            input_channel: int = 3,
-            depth_multiplier: float = 1.0,
-            use_relu6: bool = True,
+        self,
+        input_channel: int = 3,
+        depth_multiplier: float = 1.0,
+        use_relu6: bool = True,
     ):
-        """Constructs MobileNetV1 architecture
+        """Constructs MobileNetV1 architecture.
+
         Args:
             n_classes (int, optional): count of output neuron in last layer. Defaults to 1000.
             input_channel (int, optional): input channels in first conv layer. Defaults to 3.
-            depth_multiplier (float, optional): network width multiplier ( width scaling ). Suggested Values - 0.25, 0.5, 0.75, 1.. Defaults to 1.0.
-            use_relu6 (bool, optional): whether to use standard ReLU or ReLU6 for depthwise separable convolution block. Defaults to True.
+            depth_multiplier (float, optional): network width multiplier ( width scaling ). Suggested Values - 0.25,
+                0.5, 0.75, 1.. Defaults to 1.0.
+            use_relu6 (bool, optional): whether to use standard ReLU or ReLU6 for depthwise separable convolution block.
+                Defaults to True.
         """
-
         super().__init__()
 
         # The configuration of MobileNetV1
@@ -93,11 +97,7 @@ class MobileNetV1(nn.Module):
             (1024, 1024, 1),
         )
 
-        self.model = nn.Sequential(
-            nn.Conv2d(
-                input_channel, int(32 * depth_multiplier), (3, 3), stride=2, padding=1
-            )
-        )
+        self.model = nn.Sequential(nn.Conv2d(input_channel, int(32 * depth_multiplier), (3, 3), stride=2, padding=1))
 
         # Adding depthwise block in the model from the config
         for in_channels, out_channels, stride in config:
