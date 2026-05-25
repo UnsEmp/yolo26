@@ -2,6 +2,8 @@ import torch
 import torch.nn as nn
 
 from ultralytics.nn.modules.conv import Conv
+
+
 class SGhostConv(nn.Module):
     """Ghost Convolution module.
 
@@ -45,8 +47,8 @@ class SGhostConv(nn.Module):
         y = self.cv1(x)
 
         gate = torch.sigmoid(self.cv2(y))
-        out_star = y * gate 
-        
+        out_star = y * gate
+
         # 4. 为了凑够 c2 通道 (保持 GhostConv 的行为)，我们将 y 和 out_star 拼接
         # y: 原始信息, out_star: 注意力激活后的信息
         return torch.cat((y, out_star), 1)

@@ -1,19 +1,21 @@
 import torch
 import torch.nn as nn
+
 from .conv import Conv
 
-__all__ = ['C2f_SENetV2', 'SELayerV2']
+__all__ = ["C2f_SENetV2", "SELayerV2"]
+
 
 # 定义SE模块
 class SELayer(nn.Module):
     def __init__(self, channel, reduction=16):
-        super(SELayer, self).__init__()
+        super().__init__()
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         self.fc = nn.Sequential(
             nn.Linear(channel, channel // reduction, bias=False),
             nn.ReLU(inplace=True),
             nn.Linear(channel // reduction, channel, bias=False),
-            nn.Sigmoid()
+            nn.Sigmoid(),
         )
 
     def forward(self, x):
@@ -26,35 +28,22 @@ class SELayer(nn.Module):
 # 定义SaE模块
 class SELayerV2(nn.Module):
     def __init__(self, in_channel, reduction=16):
-        super(SELayerV2, self).__init__()
-        assert in_channel >= reduction and in_channel % reduction == 0, 'invalid in_channel in SaElayer'
+        super().__init__()
+        assert in_channel >= reduction and in_channel % reduction == 0, "invalid in_channel in SaElayer"
         self.reduction = reduction
         self.cardinality = 4
         self.avg_pool = nn.AdaptiveAvgPool2d(1)
         # cardinality 1
-        self.fc1 = nn.Sequential(
-            nn.Linear(in_channel, in_channel // self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        self.fc1 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
         # cardinality 2
-        self.fc2 = nn.Sequential(
-            nn.Linear(in_channel, in_channel // self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        self.fc2 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
         # cardinality 3
-        self.fc3 = nn.Sequential(
-            nn.Linear(in_channel, in_channel // self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        self.fc3 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
         # cardinality 4
-        self.fc4 = nn.Sequential(
-            nn.Linear(in_channel, in_channel // self.reduction, bias=False),
-            nn.ReLU(inplace=True)
-        )
+        self.fc4 = nn.Sequential(nn.Linear(in_channel, in_channel // self.reduction, bias=False), nn.ReLU(inplace=True))
 
         self.fc = nn.Sequential(
-            nn.Linear(in_channel // self.reduction * self.cardinality, in_channel, bias=False),
-            nn.Sigmoid()
+            nn.Linear(in_channel // self.reduction * self.cardinality, in_channel, bias=False), nn.Sigmoid()
         )
 
     def forward(self, x):
@@ -113,6 +102,7 @@ class C2f_SENetV2(nn.Module):
         y = list(self.cv1(x).split((self.c, self.c), 1))
         y.extend(m(y[-1]) for m in self.m)
         return self.cv2(torch.cat(y, 1))
+
 
 # import ipdb
 #
