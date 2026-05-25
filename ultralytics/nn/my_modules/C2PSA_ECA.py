@@ -1,20 +1,20 @@
 import torch
 import torch.nn as nn
+
 from ultralytics.nn.modules.conv import Conv
 
 
 class SRMHSA2D(nn.Module):
+    """Spatial-Reduction Multi-Head Self-Attention for 2D feature maps. Q: full resolution, K/V: pooled by sr_ratio.
     """
-    Spatial-Reduction Multi-Head Self-Attention for 2D feature maps.
-    Q: full resolution, K/V: pooled by sr_ratio.
-    """
+
     def __init__(self, dim, num_heads=4, sr_ratio=2):
         super().__init__()
         assert dim % num_heads == 0
         self.dim = dim
         self.num_heads = num_heads
         self.head_dim = dim // num_heads
-        self.scale = self.head_dim ** -0.5
+        self.scale = self.head_dim**-0.5
         self.sr_ratio = sr_ratio
 
         self.q = nn.Conv2d(dim, dim, 1, bias=False)
@@ -35,11 +35,11 @@ class SRMHSA2D(nn.Module):
         x_sr = self.sr(x)
         kv = self.kv(x_sr)  # (B,2C,H',W')
         kv = kv.flatten(2).transpose(1, 2)  # (B, H'W', 2C)
-        k, v = kv.chunk(2, dim=-1)          # (B, H'W', C) each
+        k, v = kv.chunk(2, dim=-1)  # (B, H'W', C) each
 
         # reshape to heads
         q = q.view(B, H * W, self.num_heads, self.head_dim).transpose(1, 2)  # (B, heads, HW, d)
-        k = k.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)     # (B, heads, H'W', d)
+        k = k.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)  # (B, heads, H'W', d)
         v = v.view(B, -1, self.num_heads, self.head_dim).transpose(1, 2)
 
         attn = (q @ k.transpose(-2, -1)) * self.scale  # (B,heads,HW,H'W')
@@ -47,11 +47,13 @@ class SRMHSA2D(nn.Module):
         out = attn @ v  # (B,heads,HW,d)
 
         out = out.transpose(1, 2).contiguous().view(B, H * W, C)  # (B,HW,C)
-        out = out.transpose(1, 2).view(B, C, H, W)                # (B,C,H,W)
+        out = out.transpose(1, 2).view(B, C, H, W)  # (B,C,H,W)
         return self.proj(out)
 
+
 class LiteFFN(nn.Module):
-    """Mobile-friendly FFN: PW -> DW -> PW"""
+    """Mobile-friendly FFN: PW -> DW -> PW."""
+
     def __init__(self, c, expansion=2.0, drop=0.0):
         super().__init__()
         hidden = int(c * expansion)
@@ -63,8 +65,10 @@ class LiteFFN(nn.Module):
     def forward(self, x):
         return self.drop(self.pw2(self.dw(self.pw1(x))))
 
+
 class PSABlock_SRA(nn.Module):
     """PSA-like block using SRMHSA + lightweight FFN."""
+
     def __init__(self, c, num_heads=4, sr_ratio=2, ffn_expansion=2.0):
         super().__init__()
         self.attn = SRMHSA2D(c, num_heads=num_heads, sr_ratio=sr_ratio)
@@ -78,6 +82,7 @@ class PSABlock_SRA(nn.Module):
 
 class C2PSA_ECA(nn.Module):
     """C2PSA with spatial-reduction attention (lighter than full MHSA)."""
+
     def __init__(self, c1, c2, n=1, e=0.5, sr_ratio=2, ffn_expansion=2.0):
         super().__init__()
         assert c1 == c2
@@ -90,10 +95,12 @@ class C2PSA_ECA(nn.Module):
         # 也可更激进：限制最大头数，提升端侧速度
         num_heads = min(num_heads, 8)
 
-        self.m = nn.Sequential(*(
-            PSABlock_SRA(self.c, num_heads=num_heads, sr_ratio=sr_ratio, ffn_expansion=ffn_expansion)
-            for _ in range(n)
-        ))
+        self.m = nn.Sequential(
+            *(
+                PSABlock_SRA(self.c, num_heads=num_heads, sr_ratio=sr_ratio, ffn_expansion=ffn_expansion)
+                for _ in range(n)
+            )
+        )
 
     def forward(self, x):
         a, b = self.cv1(x).split((self.c, self.c), dim=1)
